@@ -205,3 +205,219 @@
     { "name": "河下水希 (草莓100%)", "prompt": "Mizuki Kawashita (Strawberry 100% TV anime style) - extremely high-quality soft shojo/shonen rom-com art, extremely beautiful and cute female faces, highly detailed glossy eyes, lush hair, slight ecchi aesthetic" }
   ]
 }
+{
+  "CATEGORY_CONFIG": {
+    "angIds": ["正面","左側","右側","左半側面","右半側面","背面","俯視角","仰視角","魚眼視角"],
+    "distIds": ["頭像","胸像","半身像","肖像","全身像","原生"],
+    "bodyPoseIds": ["站立","蹲下","撐腿蹲","下跪","半跪","坐下","跪坐","盤坐","鴨子坐","抱腿","躺平","半趴","全趴","側躺","全側躺","跳躍(大)","跳躍(小)"],
+    "legPoseIds": ["合腿","開腿","X腿","前後腳","弓步","馬步","抬腿","踢腿","半劈腿","劈腿"],
+    "handPoseIds": ["扶額","敬禮","頰心","比心(單手)","比心(雙手)","比心(全身)","可愛(點)","可愛(拳)","點手","比噓","托腮","托下巴","撐頭","抱胸","插腰","貓手","虎爪","拜託","祈禱","握拳","握手","給我","中指","比讚","比一","比二","比三","比四","比五","比六","比七","比八","比九","比十","開手","負手","格鬥","ROCK","無奈"]
+  },
+  "FRAMING_PROMPTS": {
+    "headshot": "\n**Framing (CRITICAL):** EXTREME CLOSE-UP HEADSHOT. Face and head ONLY. The head MUST be scaled so large that it takes up 90% of the canvas. The character MUST NOT be floating. The bottom of the neck/jawline MUST touch and be cut off exactly by the absolute bottom border of the canvas. Zero empty space below the subject.",
+    "chest": "\n**Framing (CRITICAL):** Bust/Chest-up. Shoulders and head maximally fill the canvas. The character MUST NOT be floating. The bottom of the chest MUST touch and be cut off exactly by the absolute bottom border of the canvas. Zero empty space below the subject.",
+    "halfBody": "\n**Framing (CRITICAL):** Half-body (Waist up). Head, body, and hands maximally fill the canvas. The character MUST NOT be floating. The bottom of the waist MUST touch and be cut off exactly by the absolute bottom border of the canvas. Zero empty space below the subject.",
+    "threeQuarter": "\n**Framing (CRITICAL):** Three-quarter portrait (Knees up). Head, body, hips, and thighs maximally fill the canvas. The character MUST NOT be floating. The bottom of the legs/knees MUST touch and be cut off exactly by the absolute bottom border of the canvas. Zero empty space below the subject.",
+    "fullBody": "\n**Framing:** Full-Body. Subject should be as large as possible, spanning from the very top to the very bottom of the canvas. Entire character from head to toe must be visible without being cropped out."
+  },
+  "THEME_PROMPTS": {
+    "dark-creature": {
+      "options": [
+        {"zh": "吸血鬼領主", "en": "Vampire Lord"}, {"zh": "狼人", "en": "Werewolf"}, 
+        {"zh": "石像鬼", "en": "Gargoyle"}, {"zh": "巫妖", "en": "Lich"}, 
+        {"zh": "深淵惡魔", "en": "Abyssal Demon"}, {"zh": "怨靈", "en": "Wraith"}
+      ],
+      "template": "- **Creature:** Convert the subject into a {en}. Monstrous, terrifying, dark fantasy aesthetic."
+    },
+    "victorian": {
+      "template": "- **Fashion:** Authentic 19th-century Victorian era historical clothing, elegant dresses, corsets, top hats, elegant suits. NO specific modern or ACG character named Victoria."
+    },
+    "dc-universe": {
+      "options": [
+        {"zh": "超人", "en": "Superman"}, {"zh": "蝙蝠俠", "en": "Batman"}, 
+        {"zh": "神力女超人", "en": "Wonder Woman"}, {"zh": "閃電俠", "en": "The Flash"}, 
+        {"zh": "水行俠", "en": "Aquaman"}, {"zh": "小丑", "en": "Joker"}, 
+        {"zh": "哈莉·奎茵", "en": "Harley Quinn"}, {"zh": "貓女", "en": "Catwoman"}
+      ],
+      "template": "- **DC Character Cosplay:** {en}."
+    },
+    "marvel-universe": {
+      "options": [
+        {"zh": "鋼鐵人", "en": "Iron Man"}, {"zh": "美國隊長", "en": "Captain America"}, 
+        {"zh": "雷神索爾", "en": "Thor"}, {"zh": "黑寡婦", "en": "Black Widow"}, 
+        {"zh": "蜘蛛人", "en": "Spider-Man"}, {"zh": "奇異博士", "en": "Doctor Strange"}, 
+        {"zh": "緋紅女巫", "en": "Scarlet Witch"}, {"zh": "黑豹", "en": "Black Panther"}
+      ],
+      "template": "- **Marvel Character Cosplay:** {en}."
+    },
+    "blizzard-universe": {
+      "options": [
+        {"zh": "希瓦娜斯", "en": "Sylvanas Windrunner"}, {"zh": "阿薩斯", "en": "Arthas Menethil"}, 
+        {"zh": "閃光", "en": "Tracer"}, {"zh": "慈悲", "en": "Mercy"}, 
+        {"zh": "D.Va", "en": "D.Va"}, {"zh": "伊利丹", "en": "Illidan Stormrage"}, 
+        {"zh": "珍娜", "en": "Jaina Proudmoore"}
+      ],
+      "template": "- **Blizzard Character Cosplay:** {en}. Highly detailed chunky armor or signature outfit."
+    },
+    "halloween": {
+      "options": [
+        {"zh": "吸血鬼", "en": "Vampire"}, {"zh": "女巫", "en": "Witch"}, 
+        {"zh": "幽靈", "en": "Ghost"}, {"zh": "殭屍", "en": "Zombie"}, 
+        {"zh": "木乃伊", "en": "Mummy"}, {"zh": "海盜", "en": "Pirate"}
+      ],
+      "template": "- **Costume:** {en}."
+    },
+    "christmas": {
+      "options": [
+        {"zh": "聖誕老人", "en": "Santa Claus"}, {"zh": "聖誕精靈", "en": "Christmas Elf"}, 
+        {"zh": "馴鹿", "en": "Reindeer"}, {"zh": "天使", "en": "Christmas Angel"}, 
+        {"zh": "雪人", "en": "Snowman"}
+      ],
+      "template": "- **Costume:** {en}."
+    },
+    "new-year": {
+      "template": "- **Outfit:** Traditional vibrant red/gold Lunar New Year attire (Tangzhuang, Qipao, Hanfu)."
+    },
+    "cyberpunk": {
+      "options": [
+        {"zh": "街頭武士", "en": "Street Samurai"}, {"zh": "竄網使", "en": "Netrunner"}, 
+        {"zh": "企業高管", "en": "Corpo Exec"}, {"zh": "科技拾荒者", "en": "Tech-Scavenger"}, 
+        {"zh": "賽博忍者", "en": "Cyber-Ninja"}
+      ],
+      "template": "- **Cyberpunk Role:** {en}. Cyberware, neon accents, futuristic clothing."
+    },
+    "steampunk": {
+      "options": [
+        {"zh": "飛船艦長", "en": "Airship Captain"}, {"zh": "瘋狂發明家", "en": "Mad Inventor"}, 
+        {"zh": "蒸汽傭兵", "en": "Steam-Mercenary"}, {"zh": "維多利亞偵探", "en": "Victorian Detective"}
+      ],
+      "template": "- **Steampunk Role:** {en}. Brass, gears, leather, Victorian fashion."
+    },
+    "post-apocalyptic": {
+      "options": [
+        {"zh": "廢土拾荒者", "en": "Wasteland Scavenger"}, {"zh": "公路戰士", "en": "Road Warrior"}, 
+        {"zh": "變種人獵手", "en": "Mutant Hunter"}
+      ],
+      "template": "- **Wasteland Role:** {en}. Rugged, scavenged armor, dusty."
+    },
+    "fantasy": {
+      "options": [
+        {"zh": "高階騎士", "en": "Noble Knight"}, {"zh": "大魔法師", "en": "Grand Wizard"}, 
+        {"zh": "精靈遊俠", "en": "Elf Ranger"}, {"zh": "半獸人狂戰士", "en": "Orc Berserker"}, 
+        {"zh": "盜賊", "en": "Rogue"}
+      ],
+      "template": "- **Fantasy Class:** {en}. Epic high fantasy RPG attire."
+    },
+    "xianxia": {
+      "template": "- **Xianxia:** Transcendent cultivator in flowing ancient Chinese robes (e.g., white silk, jade)."
+    },
+    "sci-fi": {
+      "options": [
+        {"zh": "星艦艦長", "en": "Starship Captain"}, {"zh": "太空陸戰隊", "en": "Space Marine"}, 
+        {"zh": "軌道守衛", "en": "Orbital Guard"}, {"zh": "賞金獵人", "en": "Bounty Hunter"}
+      ],
+      "template": "- **Sci-Fi Role:** {en}. Advanced futuristic high-tech suit."
+    },
+    "student-uniform": {
+      "options": [
+        {"zh": "日式水手服", "en": "Japanese sailor fuku"}, {"zh": "英式西裝制服", "en": "British formal school blazer"}, 
+        {"zh": "台式高中制服", "en": "Taiwanese high school uniform"}, {"zh": "魔法學院制服", "en": "Magical academy uniform"}
+      ],
+      "template": "- **Uniform:** {en}."
+    },
+    "occupation": {
+      "options": [
+        {"zh": "飛行員", "en": "Pilot"}, {"zh": "外科醫師", "en": "Surgeon"}, 
+        {"zh": "大廚", "en": "Chef"}, {"zh": "警察", "en": "Police Officer"}, 
+        {"zh": "消防員", "en": "Firefighter"}, {"zh": "科學家", "en": "Scientist"}, 
+        {"zh": "太空人", "en": "Astronaut"}
+      ],
+      "template": "- **Profession:** {en}. Professional work attire."
+    },
+    "magical-girl": {
+      "options": [
+        {"zh": "魔法少女", "en": "Magical Girl"}, {"zh": "黑魔法少女", "en": "Dark Magical Girl"}, 
+        {"zh": "星光守護者", "en": "Star Guardian"}
+      ],
+      "template": "- **Role:** {en}. Frilly dresses, magical glowing props, anime aesthetic."
+    },
+    "hyakki-yagyo": {
+      "options": [
+        {"zh": "九尾狐", "en": "Kitsune"}, {"zh": "天狗", "en": "Tengu"}, 
+        {"zh": "鬼族", "en": "Oni"}, {"zh": "雪女", "en": "Yuki-onna"}, 
+        {"zh": "般若", "en": "Hannya"}
+      ],
+      "template": "- **Yokai:** {en}. Traditional Japanese mythological demon/spirit."
+    },
+    "disney-princess": {
+      "options": [
+        {"zh": "白雪公主", "en": "Snow White"}, {"zh": "仙杜瑞拉", "en": "Cinderella"}, 
+        {"zh": "愛麗兒", "en": "Ariel"}, {"zh": "貝兒", "en": "Belle"}, 
+        {"zh": "茉莉", "en": "Jasmine"}, {"zh": "寶嘉康蒂", "en": "Pocahontas"}, 
+        {"zh": "花木蘭", "en": "Mulan"}, {"zh": "樂佩", "en": "Rapunzel"}, 
+        {"zh": "蒂安娜", "en": "Tiana"}, {"zh": "奧蘿拉", "en": "Aurora"}, 
+        {"zh": "梅莉達", "en": "Merida"}, {"zh": "艾莎", "en": "Elsa"}, 
+        {"zh": "安娜", "en": "Anna"}, {"zh": "莫娜", "en": "Moana"}, 
+        {"zh": "拉雅", "en": "Raya"}
+      ],
+      "template": "- **Princess:** Cosplaying as {en}. Signature dress and accessories."
+    }
+  },
+  "STYLE_PROMPTS": {
+    "lego": "**Art Style (Lego Minifigure / 樂高):** \n- **Material:** Shiny ABS plastic. \n- **Forms:** Blocky, cylindrical head, C-shaped hands, blocky legs. \n- **Face:** Painted simple decal face on the cylindrical head.{chibiProp}",
+    "doodle": "**Art Style (Children's Doodle / 兒童塗鴉):** \n- **Execution:** Very rough, messy, naive drawing. Crayons or markers. \n- **Forms:** Highly simplified, disproportionate. Flat, no shading.{chibiProp} \n**NEGATIVE PROMPTS:** detailed, realistic, perfect anatomy, 3D render.",
+    "childrens-book": "**Art Style (Children's Book Illustration / 童書繪本):** \n- **Execution:** Whimsical, charming, soft textures (watercolor/colored pencil). \n- **Mood:** Innocent, storytelling, warm.{chibiProp} \n**NEGATIVE PROMPTS:** dark, realistic, sharp digital edges.",
+    "clay": "**Art Style (Claymation / Clay Sculpture):** Stop-motion modeling clay sculpture. \n- **Material & Texture (CRITICAL):** Distinct texture of real modeling clay (plasticine/polymer). Show subtle imperfections like fingerprints, smudges, tool marks. \n- **Lighting:** Soft practical lighting mimicking real-world studio setup. \n- **Forms & Color:** Soft, rounded handmade shapes. Rich, saturated clay colors.{chibiProp} \n**NEGATIVE PROMPTS:** photorealistic, smooth perfect digital 3D look, retaining original photo body.",
+    "popmart": "**Art Style (POPMART Cosplay / 潮玩Cosplay):** A famous POPMART character (Molly, Skullpanda, Dimoo, etc.) will cosplay as the person. \n- **Clothing & Hairstyle (CRITICAL):** EXACT clothing and hairstyle from the photo. \n- **Facial Likeness (Subtle Fusion):** Character's face remains fundamentally their own, subtly blending the essence of the person. \n- **Proportions:** Chibi (large oversized head, small body). \n- **Material:** Seamless high-quality vinyl, smooth high-gloss or semi-gloss sheen. NO visible joints. \n**NEGATIVE PROMPTS:** 2D, drawing, articulation joints, visible seams, fabric, retaining original photo body.",
+    "bjd": "**Art Style (Ball-Jointed Doll / BJD):** Convert the subject into a high-quality, physical Ball-Jointed Doll. \n- **Material:** Polished cast resin with a semi-matte or satin sheen. \n- **Joints (CRITICAL):** Clear, visible ball-and-socket joints at neck, shoulders, elbows, wrists, hips, knees. \n- **Face:** Delicate, multi-layered \"face-up\" paint. Glass/acrylic inset eyes with depth. \n- **Proportions:** Styled appropriately for doll.{chibiProp} \n**NEGATIVE PROMPTS:** 2D, anime, cartoon, real person, human skin, seamless body, no visible joints, painted-on eyes, retaining original photo body.",
+    "barbie": "**Art Style (Classic Barbie Doll / 芭比娃娃):** Transform the subject into a photorealistic classic Barbie doll. \n- **Face:** Signature Barbie features: arched eyebrows, large almond eyes with colorful makeup, wide bright smile. \n- **Proportions:** Slender, tall Barbie proportions. \n- **Material:** Solid, painted vinyl with a smooth, matte finish. \n- **Hair:** Synthetic doll wig texture. \n**NEGATIVE PROMPTS:** realistic human, 2D, anime, BJD, natural look, messy hair, retaining original photo body.",
+    "licca": "**Art Style (Japanese Licca-chan Doll / 莉卡娃娃):** Convert the subject into a physical, photorealistic Japanese Licca-chan fashion doll. \n- **Face:** Shōjo manga inspired painted doll face. Very large, round eyes with sharp white highlights, tiny painted dot nose, cute closed-lip smile. \n- **Proportions:** Youthful doll proportions (5-6 heads tall). \n- **Material (CRITICAL):** Soft, matte-finish Japanese vinyl/plastic body and face. \n- **Hair:** Synthetic rooted doll hair texture. \n**NEGATIVE PROMPTS:** 2D, flat illustration, realistic human skin, living person, photorealistic face, retaining original photo body.",
+    "anime-statue": "**Art Style (1:1 Anime Scale Figure / 等比例公仔):** Completely redraw the subject as a high-quality, physical, 1:1 scale PVC anime figure. \n- **Material:** Smooth, painted PVC/ABS plastic. Matte skin finish, slightly glossy hair/clothes. \n- **Lighting:** Studio product photography lighting with realistic reflections and subtle shadows on the plastic surfaces. \n- **Proportions:** Standard anime proportions. \n**NEGATIVE PROMPTS:** 2D flat illustration, real human, human skin, fabric clothing texture, retaining original photo body.",
+    "3d-chibi": "**Art Style (3D Chibi Figure):** Convert to a generic cute 3D chibi figure.\n- **Proportions:** Chibi (large head, small stout body).\n- **Material:** Smooth plastic/resin/vinyl look with proper specular highlights. Not real human skin.\n- **Likeness:** Preserve facial identity adapted into cute toy form.\n- **Render:** Photorealistic product shot of the toy.",
+    "nendoroid": "**Art Style (Nendoroid Figure / 好微笑黏土人):** Convert to a physical Good Smile Company Nendoroid collectible figure.\n- **Proportions (CRITICAL):** Exact Nendoroid proportions (massive head, highly stylized cute minimalist body, simple joints).\n- **Face:** Painted, ultra-simplified anime face decal typical of Nendoroids.\n- **Material:** Matte PVC/ABS plastic. NO human skin texture.\n- **Render:** Photorealistic product shot of the toy.\n**NEGATIVE PROMPTS:** real human, 2D illustration, generic 3D, retaining original photo body.",
+    "granblue": "**Art Style (Granblue Fantasy Cosplay / 碧藍幻想Cosplay):** A famous character from 'Granblue Fantasy' will cosplay as the person. \n- **Execution:** Distinct Japanese high-fantasy illustrative style (日式插畫風). \n- **Color & Rendering (CRITICAL):** Masterful 2D illustrative painterly coloring with **highly visible, textured brushstrokes** and watercolor-like blending. It MUST look like a hand-painted 2D illustration. Vibrant, high-saturation color palette. Avoid pure flat cel-shading; forms should be rendered with soft, painterly gradients mixed with sharp highlights. Thin, delicate brown or colored linework. NO heavy black outlines. \n- **Proportions:** Appropriate for style.{chibiProp} \n**NEGATIVE PROMPTS:** 3D render, photorealistic, flat cel-shading, vector art, plastic look, low saturation, dull colors, heavy black outlines, retaining original photo body.",
+    "chiikawa": "**Art Style (Chiikawa Cosplay / 吉伊卡哇Cosplay):** A famous character from the 'Chiikawa' universe will cosplay as the person in the photo.\n- **Clothing:** Highly simplified, one-piece outfit capturing the main colors of the reference.\n**EYE DRAWING MANDATE (ABSOLUTE LAW):**\n1. Draw a solid, fat black oval base.\n2. Place a small, solid white circular highlight in the top half.\n3. Place a small, upward-curving white crescent highlight directly below the circle.\n**Other Rules:** Exactly 2 heads tall. Simple w-shape mouth with a separate curved line underneath. Oval red blushes on cheeks containing four short diagonal lines. Wobbly linework.\n**NEGATIVE PROMPTS:** realistic style, sharp lines, eyes with single or zero highlights, pure black dot eyes, retaining original photo body.",
+    "kojima": "**Art Style (Ayami Kojima Cosplay / 小島文美Cosplay):** A famous Castlevania character will cosplay as the person. \n- **Execution:** Fluent, complex, delicate colored line art. Soft watercolor-like blended gradients. \n- **Skin (NON-NEGOTIABLE):** EXTREMELY LOW SATURATION, pale, cool-toned porcelain skin. STRICTLY FORBID warm/rosy skin tones. \n- **Mood/Lighting:** Dramatic chiaroscuro, gothic, melancholic. Hazy halos. \n**NEGATIVE PROMPTS:** anime, chibi, cute, smiling, cel-shading, hard black outlines, warm skin tones, rosy cheeks, retaining original photo body.",
+    "mikimoto": "**Art Style (Haruhiko Mikimoto / 美樹本晴彥 Cosplay):** A famous character designed by Haruhiko Mikimoto (e.g., from Macross) will cosplay as the person in the photo. \n- **Clothing & Hairstyle:** EXACT clothing and hairstyle from the photo. \n- **Execution:** Classic 80s Macross anime aesthetic. Soft, delicate, watercolor-like painterly shading. \n- **Eyes:** Soulful, watery eyes with beautiful soft gradients. \n- **Mood:** Nostalgic, elegant, highly atmospheric 80s pop idol vibe.{chibiProp} \n**NEGATIVE PROMPTS:** hard cel-shading, modern digital flat colors, 3D render, retaining original photo body.",
+    "nishimura": "**Art Style (Kinu Nishimura / 西村絹 Cosplay):** A famous character designed by Kinu Nishimura (e.g., from Capcom fighting games) will cosplay as the person in the photo. \n- **Clothing & Hairstyle:** EXACT clothing and hairstyle from the photo. \n- **Execution:** 90s Capcom fighting game illustration style. Extremely dynamic, energetic. \n- **Anatomy:** Strong, sharply defined stylized muscles. \n- **Coloring:** Painterly yet crisp, vibrant contrasting colors with hard brush strokes.{chibiProp} \n**NEGATIVE PROMPTS:** soft blending, pastel colors, 3D render, realistic photography, retaining original photo body.",
+    "nomura": "**Art Style (Tetsuya Nomura / 野村哲也 Cosplay):** A famous character designed by Tetsuya Nomura (e.g., from Final Fantasy or Kingdom Hearts) will cosplay as the person in the photo. \n- **Clothing & Hairstyle:** EXACT clothing and hairstyle from the photo. \n- **Execution:** Final Fantasy / Kingdom Hearts concept art style. \n- **Design (CRITICAL):** Spiky intricate hair, excessive use of belts, zippers, and silver jewelry. Cool urban fantasy fashion. \n- **Face:** Sharp, edgy, moody facial expressions. High-contrast cel-shaded/painterly hybrid rendering.{chibiProp} \n**NEGATIVE PROMPTS:** classic 80s anime, cute, round faces, retaining original photo body.",
+    "kim-hyung-tae": "**Art Style (Kim Hyung-tae Anime Game Illustration / 金亨泰風格遊戲插畫):** \n- **MANDATORY ANIME CONVERSION:** Completely redraw the subject as a highly stylized 2D anime/game character. ABANDON all photorealism.\n- **Face & Proportions:** Use a stylized anime face. Exaggerate body proportions (elongated limbs, dynamic anime physique).\n- **Skin Rendering (CRITICAL):** Paint the skin with a distinct, luminous, smooth 'oily' or 'glossy' sheen (wet look). Use soft blended gradients with VERY SHARP, bright specular highlights on the skin, shoulders, and lips.\n- **Linework:** Lineless anime illustration approach. Define forms by color planes and high-contrast lighting.\n**NEGATIVE PROMPTS:** real human face, photorealistic, photography, realistic human proportions, dry texture, matte finish, retaining original photo body.",
+    "kishida-mel": "**Art Style (Kishida Mel / 岸田梅爾):** Luminous translucent watercolor-like coloring. Massive eyes with top shadow and vertical gradient. Droopy lower eyelids (no hard line, just soft shadow). Extremely fine detailed hair strands over soft base.",
+    "genshin-reverse": "**Art Style (Genshin Impact 3D Anime Cel-Shaded / 米哈遊3D賽璐璐):** \n- **MANDATORY ANIME CONVERSION:** Completely redraw the subject in the official 3D anime cel-shaded style of 'Genshin Impact' (HoYoverse). \n- **Rendering (CRITICAL):** Japanese 3D Anime rendering (NPR). Flat cel-shading with extremely sharp, hard-edged graphic shadows mapped onto 3D forms. Absolutely NO realistic skin textures, NO soft airbrushing on skin. \n- **Face:** Stylized anime face, huge anime eyes with complex gradients and \"gem-like\" highlights, tiny dot nose. \n- **Aesthetic:** Bright, luminous \"translucent\" (通透感) fantasy lighting.{chibiProp} \n**NEGATIVE PROMPTS:** photorealistic, real human, cosplay, photography, 3D realistic render, soft gradients, retaining original photo body.",
+    "arcane": "**Art Style (Arcane Cosplay / 3D彩繪):** A famous character from 'Arcane' will cosplay as the person in the photo. \n- **Cosplay & Likeness (CRITICAL):** EXACT clothing and hairstyle from the reference photo. STRICTLY FORBIDDEN to use the character's original hair. \n- **Facial Likeness (Subtle Fusion):** Character's face remains their own, subtly blending the essence of the person. \n- **Execution:** 2.5D gritty, painterly style of Arcane. Visible, textural brushstrokes on skin and clothing. NO smooth airbrushing. \n- **Lighting:** Dramatic, high-contrast chiaroscuro. Strong colored rim lighting. Deep shadows with rich colors. \n**NEGATIVE PROMPTS:** smooth blending, airbrushing, cel-shading, clean lines, flat colors, heavy black outlines, retaining original photo body.",
+    "persona": "**Art Style (Persona 5 Cosplay / 副島成記):** A famous character from 'Persona 5' will cosplay as the person. \n- **Clothing & Hairstyle:** EXACT clothing and hairstyle from the photo. \n- **Facial Likeness (Subtle Fusion):** Character's face remains their own, subtly blending the essence of the person. \n- **Color Palette:** Vibrant, pop-art infused, sophisticated and highly coordinated color palettes. \n- **Shading:** Sharp, clean, hard-edged cel-shading. Incorporate stylish graphic shadows. \n- **Linework:** Bold, clean, dynamic black linework. \n- **Background:** Abstract, graphic, Persona UI style (jagged shapes, star motifs, speed lines). \n**NEGATIVE PROMPTS:** photorealistic, painterly, soft shading, gradients, dull colors, retaining original photo body.",
+    "disney-3d": "**Art Style (Modern Disney Pixar 3D Animation / 迪士尼3D動畫):** \n- **MANDATORY CARTOON CONVERSION:** Completely redraw the subject as a 3D animated character from a modern Disney/Pixar blockbuster movie (e.g., Tangled, Frozen). \n- **Facial Features (CRITICAL):** Exaggerated Western 3D cartoon proportions! Huge round eyes, soft chubby cheeks, tiny button noses, soft rounded facial features. \n- **Rendering:** High-end 3D CGI rendering (Renderman style), subsurface scattering on skin, soft appealing Pixar lighting, stylized thick volume for hair.{chibiProp}\n**NEGATIVE PROMPTS:** photorealistic, real human, 2D flat illustration, traditional Japanese anime, manga, scary, gritty, sharp angles, retaining original photo body.",
+    "disney-2d": "**Art Style (Classic 2D Walt Disney Animation / 經典迪士尼2D動畫):** \n- **MANDATORY CARTOON CONVERSION:** Completely redraw the subject in the highly stylized, classic 1990s 2D Walt Disney animation movie style (e.g., Tarzan, Aladdin). \n- **Facial Features (CRITICAL):** Exaggerated Western cartoon proportions! Massive expressive eyes, prominent arched eyebrows, soft stylized Disney noses, extremely expressive mouths. \n- **Rendering:** Flat 2D colors, clean elegant cel-shaded shadows, bold smooth flowing Disney-style linework.{chibiProp}\n**NEGATIVE PROMPTS:** photorealistic, 3D CGI, rendering, real human, traditional Japanese anime, manga, realistic proportions, retaining original photo body.",
+    "junji-ito": "**Art Style (Junji Ito Manga / 伊藤潤二風格):** \n- **MANDATORY MANGA CONVERSION:** Completely redraw the subject in the iconic black-and-white manga style of Junji Ito. \n- **Rendering:** Strictly black and white ink drawing. NO COLOR. \n- **Linework:** Meticulous, obsessive, and dense cross-hatching (排線) and fine lines to create shading and texture, especially in the hair and background. \n- **Subject:** Maintain the subject's normal beauty or handsomeness, but render it entirely through this specific detailed inking technique. \n**NEGATIVE PROMPTS:** color, 3D render, photorealistic, cute, chibi, modern anime, smooth shading, retaining original photo body.",
+    "modern-cel": "**Art Style (Modern Japanese Anime / 現代動畫賽璐璐):** \n- **MANDATORY ANIME CONVERSION:** Completely redraw the subject as a 2D Japanese anime character. \n- **Rendering:** Pure flat cel-shading (平塗), extremely sharp and crisp shadow edges, glowing environment rim lighting. NO airbrushing on skin. \n- **Face:** Classic anime proportions, large expressive eyes, highly simplified nose/mouth.{chibiProp} \n**NEGATIVE PROMPTS:** photorealistic, 3D render, realistic shading, gradients, retaining original photo body.",
+    "urushihara": "**Art Style (90s Retro Anime):** Hard cel-shading, extremely pale skin, sharp V-chin, massive detailed hair with bright horizontal ribbon highlights. Mouth is a thin line, no lips.{chibiProp}",
+    "ghibli": "**Art Style (Ghibli):** Soft rounded features, very simple flat shading (no glossy highlights), delicate outlines. Traditional watercolor backgrounds.{chibiProp}",
+    "manga": "**Art Style (Japanese Manga / 黑白日漫):** Traditional black-and-white manga style. \n- **Medium (CRITICAL):** Strictly black, white, and gray tones. NO COLOR. \n- **Linework:** Clean, dynamic, expressive black ink lines. \n- **Shading:** Use screentones (dot patterns, cross-hatching) for shading and texture. No smooth grayscale gradients.{chibiProp} \n**NEGATIVE PROMPTS:** color, full color, painting, photorealistic, realistic shading, smooth gradients, retaining original photo body.",
+    "color-manga": "**Art Style (Color Manga / 彩色日漫):** Modern, colored Japanese manga style. \n- **Coloring & Shading:** Clean, simple cel-shading with flat base colors and hard-edged shadows. \n- **Linework:** Dynamic and expressive black ink lines MUST be placed on top of all colored layers.{chibiProp} \n**NEGATIVE PROMPTS:** smooth gradients, realistic shading, painterly, photorealistic, 3D render, airbrushing, screentones, black and white, retaining original photo body.",
+    "shonen-manga": "**Art Style (Random Shonen Manga Gacha / 少年漫畫轉蛋):** \n- **MANDATORY ANIME/MANGA CONVERSION:** A famous character from the selected artist's works will cosplay as the person in the photo.\n- **Clothing & Hairstyle:** EXACT clothing and hairstyle from the photo.\n- **Selected Artist Style (CRITICAL):** Draw in the exact style of {artistPrompt}.\n- **Facial Structure & Emulation (CRITICAL):** You MUST perfectly mimic the author's unique way of drawing faces. Pay strictly close attention to their IRIS SHAPE (many use narrow vertical ovals, not giant circles) and whether they draw detailed pupils. Allow exaggerated facial proportions if it fits the artist's style.\n- **Execution:** High-quality colored TV anime screenshot/illustration.{chibiProp} \n**NEGATIVE PROMPTS:** photorealistic, 3D CGI, 3D render, real human, retaining original photo body, generic modern AI anime, generic large round anime eyes.",
+    "shojo-manga": "**Art Style (Random Shojo Manga Gacha / 少女漫畫轉蛋):** \n- **MANDATORY ANIME/MANGA CONVERSION:** A famous character from the selected artist's works will cosplay as the person in the photo.\n- **Clothing & Hairstyle:** EXACT clothing and hairstyle from the photo.\n- **Selected Artist Style (CRITICAL):** Draw in the exact style of {artistPrompt}.\n- **Facial Structure & Coloring Emulation (CRITICAL):** You MUST perfectly mimic the author's specific coloring techniques, palettes, and unique way of drawing faces. Allow extremely exaggerated facial proportions if it fits the artist's style, EVEN IF it means drawing impossibly sharp 90-degree pointy chins, disproportionate eyes, or anatomically incorrect features. Abandon normal human anatomy in favor of the artist's specific stylistic quirks.\n- **Execution:** High-quality colored TV anime screenshot/illustration.{chibiProp} \n**NEGATIVE PROMPTS:** photorealistic, 3D CGI, 3D render, real human, retaining original photo body, generic shonen anime, thick black outlines.",
+    "american-comic": "**Art Style (Modern American Comic Book / 美漫):** Dynamic modern American comic style. \n- **Linework:** Bold, dynamic black ink outlines with expressive line weight. Use detailed cross-hatching and feathered shadows. \n- **Coloring:** Modern digital coloring with smooth gradients, cinematic lighting, and realistic volume.{chibiProp} \n**NEGATIVE PROMPTS:** Ben-Day dots, halftone patterns, flat colors, simple shading, photorealistic, anime, retaining original photo body.",
+    "hong-kong-comic": "**Art Style (Hong Kong Manhua / 港漫):** Hyper-stylized martial arts comic style. \n- **Anatomy:** {anatomy} Sharp, angular facial features. \n- **Rendering (Hybrid):** Smooth, painterly, airbrushed skin overlaid with extremely sharp, precise black ink linework defining contours and details. \n- **Lighting:** Dramatic high-contrast chiaroscuro. \n**NEGATIVE PROMPTS:** chibi, cute, cartoon, simple, flat colors, pure cel-shading, undefined forms, retaining original photo body.",
+    "line-art": "**Art Style (Pure Line Art / 純線稿):** High-quality, clean line art illustration. \n- **Execution:** Strictly black ink lines on a white background. No shading, no colors, no screentones. Focus entirely on beautiful, varied line weight to define forms. \n**NEGATIVE PROMPTS:** color, shading, grayscale, shadows, painting, 3D render, retaining original photo body.",
+    "fashion-illustration": "**Art Style (Fashion Illustration / 時尚插畫):** Modern, elegant fashion illustration. \n- **Proportions:** Elongated, dynamic, and stylized tall graceful body proportions. \n- **Linework & Color:** Confident fluid lines mixed with flat bold colors and sketchy watercolor/marker rendering. Focus on clothing attitude. \n**NEGATIVE PROMPTS:** photorealistic, realistic proportions, 3D render, thick outlines, retaining original photo body.",
+    "chalk": "**Art Style (Chalk Drawing / 粉筆):** \n- **Texture:** The entire image must have a dusty, grainy, and slightly blurry texture characteristic of chalk on a blackboard or pavement. Colors should be soft and pastel-like. \n- **Linework:** Edges should be soft and blended, not sharp. Show a sense of layering and smudging. \n**NEGATIVE PROMPTS:** photorealistic, digital art, sharp lines, clean edges, vibrant colors, oil painting, vector art, retaining original photo body.",
+    "crayon": "**Art Style (Crayon Drawing / 蠟筆):** \n- **Texture:** The entire image must have a waxy, slightly uneven texture characteristic of crayon drawings. Coloring should appear a bit scribbly. \n- **Linework:** Outlines should be thick and a bit shaky, as if drawn by hand. \n**NEGATIVE PROMPTS:** photorealistic, digital art, clean lines, smooth gradients, thin lines, perfect coloring, watercolor, oil painting, retaining original photo body.",
+    "watercolor": "**Art Style (Watercolor Painting / 水彩):** \n- **Technique:** Expressive watercolor painting style. Colors should have soft, blended edges, translucent layers, and characteristic watercolor blooms. Allow the white of the paper to show through. \n- **Linework:** Outlines, if present, should be soft and fluid. Avoid heavy, solid black lines. \n**NEGATIVE PROMPTS:** photorealistic, digital art, cel-shading, hard edges, opaque colors, oil painting, acrylic painting, retaining original photo body.",
+    "ink-wash": "**Art Style (Sumi-e/Ink Wash / 水墨畫):** \n- **Medium:** Black ink on rice paper. \n- **Brushwork:** Expressive brushstrokes, dry brush, monochrome with extensive use of negative space. \n- **Mood:** Traditional, poetic, elegant. \n**NEGATIVE PROMPTS:** vivid colors, full color, photorealistic, cel-shading, digital 3D render, retaining original photo body.",
+    "chalk-art": "**Art Style (Detailed Chalk Art / 粉筆藝術):** Detailed colored chalk drawing on a blackboard. \n- **Texture:** Dusty, grainy chalk texture. Matte, pastel-like finish. \n- **Linework & Blending:** Soft blended edges. Layering and smudging techniques. \n**NEGATIVE PROMPTS:** photorealistic, generic digital painting, sharp lines, retaining original photo body.",
+    "oil": "**Art Style (Oil Painting):** Expressive, thick dimensional brushstrokes (impasto). No linework. Dramatic lighting.",
+    "仿真": "**Art Style (Hyper-Polished Digital Realism):** Re-render the subject with an inhuman level of digital perfection (uncanny valley). \n- **Skin (CRITICAL):** Absolutely flawless, perfectly smooth (like high-end 3D model/airbrushed digital painting). No pores/blemishes. \n- **Hair:** Unnatural perfection. Clean, silky, idealized shapes. \n- **Lighting:** Sophisticated soft, flattering multi-point studio lighting. Ethereal glowing quality. \n**NEGATIVE PROMPTS:** retaining original photo body.",
+    "ff7": "**Art Style (Final Fantasy VII Remake Cosplay / FF7重製版Cosplay):** \n- **Rendering (CRITICAL - Hyper-Realistic 3D):** Hyper-realistic, pre-rendered cinematic 3D style. Extreme level of detail (subtle pores, fine lines, subsurface scattering on skin; strand-by-strand hair). \n- **Facial Features:** Realistic but slightly stylized/anime-inspired. Large, expressive, deep soulful eyes. \n- **Lighting & Mood:** Dramatic, cinematic lighting. Serious, melancholic mood. \n**NEGATIVE PROMPTS:** 2D, anime, cartoon, illustration, drawing, painting, cel-shading, flat colors, retaining original photo body.",
+    "silicone-doll": "**Art Style (Hyper-realistic Silicone Doll):** Convert the subject into a physical, lifelike silicone doll. \n- **Material & Texture (CRITICAL):** Must look like high-quality silicone elastomer with realistic subsurface scattering, slight translucency, and synthetic skin texture. Not human skin, not hard plastic. \n- **Eyes:** Highly realistic inset glass or acrylic eyes, glossy and deep. \n**NEGATIVE PROMPTS:** 2D, anime, painting, drawing, living human, real person, rough stone, hard plastic, retaining original photo body.",
+    "statue": "**Art Style (Hyper-Realistic Collectible Statue / 寫實雕像):** Convert the subject into a high-quality, physical, collector-grade statue. \n- **Material (CRITICAL):** Solid painted polystone or cast resin. Smooth, professional, semi-matte or satin finish. NOT glossy plastic, rough stone, or metal. \n- **Sculptural Form:** Hair sculpted with sharp, defined strands and volume. \n- **Paint Application:** Master-level hand-painted finish. Subtle airbrushed gradients on skin. \n**NEGATIVE PROMPTS:** 2D, anime, cartoon, illustration, painting, real person, living person, human skin, real hair, fabric clothing, BJD, Nendoroid, action figure, visible joints, retaining original photo body.",
+    "romance-novel": "**Art Style (90s Taiwanese Romance Novel Illustration / 90年代言情小說封面):** Channeling artists like Ping Fan (平凡) and Chen Shu-Fen (陳淑芬). \n- **Medium & Blending:** Soft, hazy, seamlessly blended mixed media (watercolor + colored pencil/airbrush). NO hard edges or outlines. \n- **Facial Features:** Extreme delicacy. Expressive, soulful eyes with soft highlights. \n- **Hair:** Meticulous detail, soft, light, ethereal with fine flowing strands. \n**NEGATIVE PROMPTS:** hard outlines, black lines, cel-shading, visible brushstrokes, impasto, sharp focus, retaining original photo body.",
+    "gongbi": "**Art Style (Gongbi - Meticulous Chinese Painting / 工筆畫):** Traditional Chinese Gongbi style, extreme precision and realist depiction. \n- **Medium & Texture:** Painted on non-glossy raw Xuan paper (生宣紙) or silk (絹). \n- **Linework (CRITICAL):** Extremely fine, precise, controlled black ink outlines (\"iron-wire lines\" 鐵線描) for all forms. NO sketchy brushstrokes. \n- **Coloring:** Multiple, thin, transparent layers of washes (分染). Soft, elegant colors. \n**NEGATIVE PROMPTS:** oil painting, impasto, visible thick brushstrokes, expressive style (Xieyi), chiaroscuro, 3D render, retaining original photo body.",
+    "impressionism": "**Art Style (Impressionist Portrait / 印象派風格肖像畫):** Oil painting in the style of Claude Monet or Pierre-Auguste Renoir. \n- **Medium & Brushwork (CRITICAL):** Short, thick, visible brushstrokes ('taches') applied side-by-side. NO photographic texture. \n- **Light & Color:** Bright, vibrant, pure color palette. Avoid black paint. \n**NEGATIVE PROMPTS:** modern photography, photorealistic skin, digital rendering, smooth blending, airbrushing, sharp lines, hard edges, black paint, retaining original photo body.",
+    "art-nouveau": "**Art Style (Art Nouveau / 新藝術):** Elegant, ornamental style channeling Alphonse Mucha. \n- **Linework:** Long, sinuous, flowing organic lines. \n- **Decoration:** Intricate stylized patterns inspired by nature (flowers, vines). \n- **Color Palette:** Harmonious, muted colors (golds, pastels, earthy tones). \n**NEGATIVE PROMPTS:** photorealistic, 3D render, retaining original photo body.",
+    "ukiyo-e": "**Art Style (Modern Ukiyo-e):** Japanese Ukiyo-e woodblock print style. \n- **Linework:** Bold, clear, confident black outlines. \n- **Color:** Flat areas of clean, vibrant color with minimal shading/gradients. \n- **Patterns:** Traditional Japanese motifs. Flattened perspective. \n**NEGATIVE PROMPTS:** photorealistic, 3D render, soft shading, retaining original photo body.",
+    "baroque": "**Art Style (Baroque Portrait / 巴洛克風格肖像畫):** Masterpiece oil painting style of Caravaggio or Rembrandt. \n- **Face & Body (CRITICAL):** Dramatic Chiaroscuro. Intense light from a single source carving features out of deep shadow. \n- **Lighting:** Tenebrism. Background plunged into near-blackness. \n- **Color Palette:** Rich, deep, saturated, earthy tones, deep reds, golds. \n**NEGATIVE PROMPTS:** modern photography, photorealistic skin, digital rendering, flat lighting, smiling, soft gradients, retaining original photo body.",
+    "renaissance": "**Art Style (High Renaissance Portrait / 文藝復興風格肖像畫):** Masterpiece oil painting style of Leonardo da Vinci or Raphael. \n- **Face & Body (CRITICAL):** Sfumato technique. Soft, hazy transitions. Smoky, no hard lines or sharp edges. \n- **Composition:** Balanced, stable, pyramidal structure. Calm, dignified pose. \n- **Lighting:** Gentle directional lighting, subtle Chiaroscuro. \n**NEGATIVE PROMPTS:** modern photography, photorealistic skin, digital rendering, sharp lines, hard edges, smiling, messy brushstrokes, retaining original photo body.",
+    "rococo": "**Art Style (Rococo Painting):** Light, elegant, ornate oil painting (like Fragonard or Boucher). \n- **Color Palette:** Light, soft, pastel (pinks, blues, greens, creamy whites). \n- **Lighting & Mood:** Soft, diffuse, cheerful. Playful, charming. \n- **Details:** Delicate brushwork, ornate asymmetrical decorations. \n**NEGATIVE PROMPTS:** photorealistic, harsh contrast, dark colors, retaining original photo body.",
+    "victorian": "**Art Style (19th Century Grand Manner Portrait / 19世紀宏偉風格肖像畫):** Masterpiece oil painting like John Singer Sargent. \n- **Medium & Brushwork:** Classical oil painting with soft, blended brushwork. Visible, confident strokes. \n- **Clothing:** Formal, opulent 19th-century attire (velvets, silks, brocades, lace). \n- **Mood & Color:** Serious, dignified. Deep crimsons, forest greens, navy blues against dark moody background. NO smiling. \n**NEGATIVE PROMPTS:** modern photography, digital rendering, airbrushed skin, sharp focus, smiling, retaining original photo body."
+  }
+}
