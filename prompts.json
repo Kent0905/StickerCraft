@@ -203,9 +203,7 @@
     { "name": "矢澤愛 (NANA)", "prompt": "Ai Yazawa (Nana / Paradise Kiss TV anime style) - extremely high foreheads, incredibly skinny elongated figures with thin necks, huge round eyes with heavy dark eyelashes/mascara, stylish 2000s punk/high-fashion aesthetic, stylized proportions resembling Eiichiro Oda's exaggeration" },
     { "name": "神尾葉子 (流星花園)", "prompt": "Yoko Kamio (Boys Over Flowers 90s TV anime style) - late 90s classic shojo, messy stylish hair, rich school uniforms, distinct 90s shojo eyes with large white highlights, expressive romantic comedy faces" },
     { "name": "河下水希 (草莓100%)", "prompt": "Mizuki Kawashita (Strawberry 100% TV anime style) - extremely high-quality soft shojo/shonen rom-com art, extremely beautiful and cute female faces, highly detailed glossy eyes, lush hair, slight ecchi aesthetic" }
-  ]
-}
-{
+  ],
   "CATEGORY_CONFIG": {
     "angIds": ["正面","左側","右側","左半側面","右半側面","背面","俯視角","仰視角","魚眼視角"],
     "distIds": ["頭像","胸像","半身像","肖像","全身像","原生"],
