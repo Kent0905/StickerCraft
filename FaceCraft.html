@@ -738,18 +738,9 @@
 
             return (
                 <div className="min-h-screen flex flex-col font-sans relative pb-10">
-                    <header className="text-center py-6 bg-gray-900 border-b border-gray-800 flex justify-between items-center px-6">
-                        <h1 className="text-2xl sm:text-3xl font-bold text-green-400 tracking-wider">
-                            FaceCraft <span className="text-gray-400 text-sm font-normal align-middle ml-2">捏臉模組</span>
-                        </h1>
-                        <button onClick={exportResult} disabled={!uploadedImage || isUploading} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg font-bold shadow-lg transition-colors">
-                            <IconExport /> <span className="hidden sm:inline">{isEmbedded ? '匯出至主程式' : '下載圖片'}</span>
-                        </button>
-                    </header>
-
                     {error && <div className="bg-red-900/80 text-red-200 p-3 text-center text-sm border-b border-red-700">{error} <button onClick={()=>setError(null)} className="ml-4 underline">關閉</button></div>}
 
-                    <div className="flex-1 flex flex-col lg:flex-row p-4 gap-6 max-w-7xl mx-auto w-full mt-4">
+                    <div className="flex-1 flex flex-col lg:flex-row p-4 gap-6 max-w-7xl mx-auto w-full mt-2">
                         {/* Left Side: Canvas */}
                         <div className="w-full lg:w-[45%] flex flex-col gap-4">
                             <div className="relative w-full aspect-square border-4 border-gray-700 rounded-2xl bg-gray-800 overflow-hidden shadow-2xl group" ref={imgConRef} onMouseMove={hdGlobalMv} onMouseUp={()=>setInter(null)} onMouseLeave={()=>setInter(null)} onTouchMove={hdGlobalMv} onTouchEnd={()=>setInter(null)}>
@@ -956,20 +947,28 @@
 
                             {/* 實際的設定面板 */}
                             <div className="flex-1 flex flex-col bg-gray-900 rounded-2xl border border-gray-800 p-4 sm:p-6 h-[80vh] lg:h-auto overflow-y-auto custom-scrollbar">
-                                <div className="flex justify-between items-center mb-4">
-                                    <div className="flex bg-gray-800 p-1 rounded-xl">
+                                <div className="flex justify-between items-start sm:items-center flex-col sm:flex-row gap-3 mb-4">
+                                    <div className="flex bg-gray-800 p-1 rounded-xl shrink-0">
                                         {[{id:'face_shape', label:'臉型'}, {id:'facial_features', label:'五官'}, {id:'hair', label:'髮型'}].map(grp => (
                                             <button key={grp.id} onClick={() => { setActiveGuideGroup(grp.id); setActiveSubGroup(null); }} className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${activeGuideGroup === grp.id ? 'bg-green-600 text-white' : 'text-gray-400 hover:text-white'}`}>
                                                 {grp.label}
                                             </button>
                                         ))}
                                     </div>
-                                    <div className="flex gap-2">
+                                    <div className="flex flex-wrap justify-end gap-2">
                                         <input type="file" ref={jsonFileRef} onChange={handleJsonUpload} accept=".json" className="hidden" />
                                         <button onClick={() => jsonFileRef.current?.click()} className="px-3 py-2 bg-purple-600/80 text-white hover:bg-purple-500 rounded-lg text-xs font-bold transition-colors">載入 JSON</button>
+                                        
                                         <input type="file" ref={tweakFileRef} onChange={handleTweakUpload} accept="image/png, image/jpeg" className="hidden" />
+                                        <button onClick={() => tweakFileRef.current?.click()} className="px-3 py-2 bg-blue-600/80 text-white hover:bg-blue-500 rounded-lg text-xs font-bold transition-colors">上傳照片</button>
+                                        
+                                        <button onClick={() => { setFaceGuides(defaultFaceGuides); setFaceTweakParams(initialTweakParams); setImageHistory([]); setHistoryIndex(-1); setInitialFaceGuides(defaultFaceGuides); }} className="px-3 py-2 bg-red-700/80 text-white hover:bg-red-600 rounded-lg text-xs font-bold transition-colors">重新</button>
+                                        
+                                        <button onClick={exportResult} disabled={!uploadedImage || isUploading} className="flex items-center gap-1 px-3 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-colors shadow-md">
+                                            <IconExport /> {isEmbedded ? '匯出' : '下載'}
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
 
                             {/* Options Area */}
                             <div className="flex-1 flex flex-col">
