@@ -355,6 +355,13 @@
                 }
             };
 
+            const handleMainTabSwitch = (tabName) => {
+                if (tabName === '捏臉') return; 
+                if (isEmbedded) {
+                    window.parent.postMessage({ type: 'SWITCH_MAIN_TAB', tab: tabName }, '*');
+                }
+            };
+
             const handleJsonUpload = (e) => {
                 const file = e.target.files?.[0]; if (!file) return;
                 const reader = new FileReader();
@@ -929,22 +936,38 @@
                             </button>
                         </div>
 
-                        {/* Right Side: Controls */}
-                        <div className="w-full lg:w-[55%] flex flex-col bg-gray-900 rounded-2xl border border-gray-800 p-4 sm:p-6 h-[80vh] lg:h-auto overflow-y-auto custom-scrollbar">
-                            <div className="flex justify-between items-center mb-4">
-                                <div className="flex bg-gray-800 p-1 rounded-xl">
-                                    {[{id:'face_shape', label:'臉型'}, {id:'facial_features', label:'五官'}, {id:'hair', label:'髮型'}].map(grp => (
-                                        <button key={grp.id} onClick={() => { setActiveGuideGroup(grp.id); setActiveSubGroup(null); }} className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${activeGuideGroup === grp.id ? 'bg-green-600 text-white' : 'text-gray-400 hover:text-white'}`}>
-                                            {grp.label}
+                        {/* Right Side: Wrapper */}
+                        <div className="w-full lg:w-[55%] flex flex-col gap-4">
+                            
+                            {/* 主程式 Tab 切換列 (獨立一條 Bar) */}
+                            {isEmbedded && (
+                                <div className="flex bg-gray-900 p-1.5 rounded-2xl border border-gray-800 shadow-sm w-full">
+                                    {['Q版', '動漫', '寫實', '捏臉'].map(tab => (
+                                        <button 
+                                            key={tab} 
+                                            onClick={() => handleMainTabSwitch(tab)}
+                                            className={`flex-1 py-2.5 rounded-xl text-sm md:text-base font-bold transition-all duration-200 ${tab === '捏臉' ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}
+                                        >
+                                            {tab}
                                         </button>
                                     ))}
                                 </div>
-                                <div className="flex gap-2">
-                                    <input type="file" ref={jsonFileRef} onChange={handleJsonUpload} accept=".json" className="hidden" />
-                                    <button onClick={() => jsonFileRef.current?.click()} className="px-3 py-2 bg-purple-600/80 text-white hover:bg-purple-500 rounded-lg text-xs font-bold transition-colors">載入 JSON</button>
-                                    <input type="file" ref={tweakFileRef} onChange={handleTweakUpload} accept="image/png, image/jpeg" className="hidden" />
-                                    <button onClick={() => tweakFileRef.current?.click()} className="px-3 py-2 bg-blue-600/80 text-white hover:bg-blue-500 rounded-lg text-xs font-bold transition-colors">上傳照片</button>
-                                    <button onClick={() => { setFaceGuides(defaultFaceGuides); setFaceTweakParams(initialTweakParams); setImageHistory([]); setHistoryIndex(-1); setInitialFaceGuides(defaultFaceGuides); }} className="px-3 py-2 bg-red-700/80 text-white hover:bg-red-600 rounded-lg text-xs font-bold transition-colors">重新開始</button>
+                            )}
+
+                            {/* 實際的設定面板 */}
+                            <div className="flex-1 flex flex-col bg-gray-900 rounded-2xl border border-gray-800 p-4 sm:p-6 h-[80vh] lg:h-auto overflow-y-auto custom-scrollbar">
+                                <div className="flex justify-between items-center mb-4">
+                                    <div className="flex bg-gray-800 p-1 rounded-xl">
+                                        {[{id:'face_shape', label:'臉型'}, {id:'facial_features', label:'五官'}, {id:'hair', label:'髮型'}].map(grp => (
+                                            <button key={grp.id} onClick={() => { setActiveGuideGroup(grp.id); setActiveSubGroup(null); }} className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${activeGuideGroup === grp.id ? 'bg-green-600 text-white' : 'text-gray-400 hover:text-white'}`}>
+                                                {grp.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <input type="file" ref={jsonFileRef} onChange={handleJsonUpload} accept=".json" className="hidden" />
+                                        <button onClick={() => jsonFileRef.current?.click()} className="px-3 py-2 bg-purple-600/80 text-white hover:bg-purple-500 rounded-lg text-xs font-bold transition-colors">載入 JSON</button>
+                                        <input type="file" ref={tweakFileRef} onChange={handleTweakUpload} accept="image/png, image/jpeg" className="hidden" />
                                 </div>
                             </div>
 
@@ -1046,6 +1069,7 @@
                                     );
                                 })()}
                             </div>
+                        </div>
                         </div>
                     </div>
                 </div>
