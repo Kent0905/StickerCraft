@@ -1,0 +1,1059 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="FaceCraft - 獨立捏臉與角色生成模組">
+    <title>FaceCraft 捏臉模組</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/framer-motion@11.0.8/dist/framer-motion.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@800&family=Noto+Sans+TC:wght@700&family=Zhi+Mang+Xing&display=swap'); 
+        body { font-family: 'Inter', sans-serif; background-color: #050505; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; overflow-x: hidden; } 
+        input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; } 
+        input[type=number] { -moz-appearance: textfield; } 
+        input[type=range] { -webkit-appearance: none; background: transparent; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%; background: #22c55e; cursor: pointer; margin-top: -6px; }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: #374151; border-radius: 2px; }
+        .bg-checkerboard-pattern { background-color: #2a2a2a; background-image: linear-gradient(45deg, #333 25%, transparent 25%), linear-gradient(135deg, #333 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #333 75%), linear-gradient(135deg, transparent 75%, #333 75%); background-size: 20px 20px; background-position: 0 0, 10px 0, 10px -10px, 0px 10px; } 
+        @keyframes fade-in-down { from { opacity: 0; transform: translateY(-20px) translateX(-50%); } to { opacity: 1; transform: translateY(0) translateX(-50%); } } 
+        .animate-fade-in-down { animation: fade-in-down 0.5s ease-out forwards; }
+    </style>
+</head>
+<body class="bg-[#050505] text-white">
+    <div id="root"></div>
+
+    <script>
+        // === 核心工具函數 ===
+        window.apiKey = ""; 
+        
+        window.processDataUrl = (dataUrl) => { if (!dataUrl) return { mimeType: null, data: null }; const parts = dataUrl.split(','); if (parts.length !== 2) return { mimeType: null, data: null }; const mimeType = parts[0].match(/:(.*?);/)?.[1]; if (!mimeType) return { mimeType: null, data: null }; return { mimeType, data: parts[1] }; };
+        window.toBase64 = file => new Promise((resolve, reject) => { const reader = new FileReader(); reader.readAsDataURL(file); reader.onload = () => resolve(reader.result); reader.onerror = error => reject(error); });
+        
+        // --- 呼叫父視窗 API 的通訊包裝 ---
+        window.callMainApi = (action, payload) => {
+            return new Promise((resolve, reject) => {
+                const requestId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
+                const handleResponse = (event) => {
+                    const data = event.data;
+                    if (!data || data.id !== requestId) return;
+                    window.removeEventListener('message', handleResponse);
+                    if (data.type === 'GEMINI_API_RESPONSE') resolve(data.result);
+                    else if (data.type === 'GEMINI_API_ERROR') reject(new Error(data.error));
+                };
+                window.addEventListener('message', handleResponse);
+                window.parent.postMessage({ type: 'GEMINI_API_REQUEST', id: requestId, action, payload }, '*');
+            });
+        };
+
+        window.generateTextWithRetry = async (payload, maxRetries = 3) => {
+            if (window.parent !== window) return await window.callMainApi('generateText', payload);
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${window.apiKey}`;
+            for (let i = 0; i < maxRetries; i++) {
+                try { const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); if (!res.ok) throw new Error(`API: ${res.status}`); const data = await res.json(); const text = data?.candidates?.[0]?.content?.parts?.[0]?.text; if (text) return text; throw new Error("無回應"); } 
+                catch (e) { if (i === maxRetries - 1) throw e; await new Promise(r => setTimeout(r, 1000 * Math.pow(2, i))); }
+            }
+        };
+
+        window.generateImageWithRetry = async (payload, maxRetries = 3) => {
+            if (window.parent !== window) return await window.callMainApi('generateImage', payload);
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${window.apiKey}`;
+            for (let i = 0; i < maxRetries; i++) {
+                try { const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); if (!res.ok) throw new Error(`API: ${res.status}`); const data = await res.json(); const inlineData = data.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData; if (!inlineData?.data) throw new Error("無圖片"); return `data:${inlineData.mimeType || 'image/jpeg'};base64,${inlineData.data}`; } 
+                catch (e) { if (i === maxRetries - 1) throw e; await new Promise(r => setTimeout(r, 2000 * Math.pow(2, i))); }
+            }
+        };
+
+        window.resizeImage = (url, w, h) => new Promise((res, rej) => { const img = new Image(); img.crossOrigin = 'Anonymous'; img.onload = () => { const c = document.createElement('canvas'); c.width = w; c.height = h; const ctx = c.getContext('2d'); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high'; ctx.drawImage(img, 0, 0, w, h); res(c.toDataURL('image/png')); }; img.onerror = rej; img.src = url; });
+        window.cropAndResizeToSquare = (url, size = 2048) => new Promise((res, rej) => { const img=new Image(); img.crossOrigin='Anonymous'; img.onload=()=>{const c=document.createElement('canvas');c.width=c.height=size;const ctx=c.getContext('2d');const ratio=Math.min(size/img.width,size/img.height),dW=img.width*ratio,dH=img.height*ratio;ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';ctx.drawImage(img,0,0,img.width,img.height,(size-dW)/2,(size-dH)/2,dW,dH);res(c.toDataURL());}; img.onerror=rej; img.src=url; });
+
+        // === AI 辨識功能 ===
+        window.drawGridForDetection = async (imageDataUrl) => {
+            return new Promise((resolve) => {
+                const img = new Image(); img.crossOrigin = "Anonymous";
+                img.onload = () => {
+                    const c = document.createElement('canvas'); c.width = 1000; c.height = 1000; const ctx = c.getContext('2d');
+                    ctx.drawImage(img, 0, 0, 1000, 1000);
+                    ctx.strokeStyle = 'rgba(255, 0, 0, 0.8)'; ctx.fillStyle = 'rgba(255, 0, 0, 1)'; ctx.font = 'bold 20px Arial'; ctx.lineWidth = 1;
+                    for (let i = 0; i <= 100; i += 5) {
+                        const pos = i * 10;
+                        ctx.beginPath(); ctx.moveTo(pos, 0); ctx.lineTo(pos, 1000); ctx.stroke();
+                        ctx.beginPath(); ctx.moveTo(0, pos); ctx.lineTo(1000, pos); ctx.stroke();
+                    }
+                    resolve(c.toDataURL('image/jpeg', 0.8));
+                };
+                img.src = imageDataUrl;
+            });
+        };
+
+        window.detectFaceGuidesAI = async (imageDataUrl) => {
+            try {
+                const gridImage = await window.drawGridForDetection(imageDataUrl);
+                const { mimeType, data } = window.processDataUrl(gridImage);
+                if (!mimeType || !data) return {};
+                const res = await window.generateTextWithRetry({
+                    contents: [{
+                        parts: [
+                            { text: "This portrait has a 0-100 coordinate grid overlaid (red lines). X: 0 left, 50 center, 100 right. Y: 0 top, 100 bottom. Read the grid carefully to estimate the exact coordinates of the subject's facial features. CRITICAL: For widths (Dx), measure from the center (50) to the ACTUAL SKIN EDGE of the face. DO NOT INCLUDE HAIR VOLUME. Exclude any hair framing the face." },
+                            { inlineData: { mimeType, data } }
+                        ]
+                    }],
+                    generationConfig: {
+                        responseMimeType: "application/json",
+                        responseSchema: {
+                            type: "OBJECT",
+                            properties: { 
+                                headTopY: { type: "NUMBER" }, hairlineY: { type: "NUMBER" }, eyebrowY: { type: "NUMBER" }, eyeY: { type: "NUMBER" }, 
+                                eyeCenterDx: { type: "NUMBER" }, noseY: { type: "NUMBER" }, mouthY: { type: "NUMBER" }, jawLowerY: { type: "NUMBER" }, 
+                                chinY: { type: "NUMBER" }, cheekboneDx: { type: "NUMBER" }, jawUpperDx: { type: "NUMBER" } 
+                            },
+                            required: ["headTopY", "hairlineY", "eyebrowY", "eyeY", "eyeCenterDx", "noseY", "mouthY", "jawLowerY", "chinY", "cheekboneDx", "jawUpperDx"]
+                        }
+                    }
+                });
+                const p = JSON.parse(res);
+                return {
+                    headTopY: Math.min(Math.max(p.headTopY, 2), 25), hairlineY: Math.min(Math.max(p.hairlineY, 15), 35), eyebrowY: Math.min(Math.max(p.eyebrowY, 35), 55), 
+                    eyeY: Math.min(Math.max(p.eyeY, 40), 60), eyeCenterDx: Math.min(Math.max(p.eyeCenterDx, 8), 16), noseY: Math.min(Math.max(p.noseY, 50), 70), 
+                    mouthY: Math.min(Math.max(p.mouthY, 60), 80), jawLowerY: Math.min(Math.max(p.jawLowerY, 65), 85), chinY: Math.min(Math.max(p.chinY, 75), 95), 
+                    chinBottomY: Math.min(Math.max(p.chinY, 75), 95) + 1, cheekboneDx: Math.min(Math.max(p.cheekboneDx, 15), 26), jawUpperDx: Math.min(Math.max(p.jawUpperDx, 14), 25)
+                };
+            } catch(e) { return {}; }
+        };
+
+        window.detectFacialFeaturesAI = async (imageDataUrl, currentOptionsMap) => {
+            try {
+                const { mimeType, data } = window.processDataUrl(imageDataUrl);
+                if (!mimeType || !data) return null;
+                const schemaProperties = {};
+                let promptText = "Analyze the character's appearance in the image and classify them according to the following categories. Choose the EXACT string from 'Available Options' if it matches perfectly. If NO option fits the visual evidence, create a HIGHLY CONCISE new label in Traditional Chinese (e.g., '雙馬尾', '八字瀏海', '圓瞳', '貓咪唇'). Max 5 characters. Return JSON.\n\n";
+
+                for (const [key, config] of Object.entries(currentOptionsMap)) {
+                    if (['artStyle', 'irisDetail', 'faceShape', 'skinTone'].includes(key)) continue; 
+                    promptText += `- ${key} (${config.label}): Available Options: [${config.opts.join(', ')}]\n`;
+                    schemaProperties[key] = { type: "STRING" };
+                }
+
+                const res = await window.generateTextWithRetry({
+                    contents: [{ parts: [{ text: promptText }, { inlineData: { mimeType, data } }] }],
+                    generationConfig: { responseMimeType: "application/json", responseSchema: { type: "OBJECT", properties: schemaProperties } }
+                });
+                return JSON.parse(res);
+            } catch(e) { return null; }
+        };
+
+        window.generateFaceComposite = (imgUrl, initialBoxes, newBoxes, g) => new Promise((resolve, reject) => {
+            const img = new Image(); img.crossOrigin = "Anonymous";
+            img.onload = () => {
+                const canvas = document.createElement('canvas'); canvas.width = img.width; canvas.height = img.height; const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+                const blankKeys = ['mouth', 'nose', 'leftEye', 'rightEye', 'leftEyebrow', 'rightEyebrow'];
+                for (const key of blankKeys) {
+                    const ib = initialBoxes[key]; if (!ib) continue;
+                    const ix = (ib.x / 100) * img.width, iy = (ib.y / 100) * img.height, iw = (ib.w / 100) * img.width, ih = (ib.h / 100) * img.height;
+                    const tempC = document.createElement('canvas'); tempC.width = 1; tempC.height = 1; const tempCtx = tempC.getContext('2d');
+                    const skinSampleX = Math.max(0, Math.min(img.width - 1, img.width * (g.centerX - 15) / 100));
+                    const skinSampleY = Math.max(0, Math.min(img.height - 1, img.height * (g.eyeY + 10) / 100));
+                    tempCtx.drawImage(img, skinSampleX, skinSampleY, 1, 1, 0, 0, 1, 1);
+                    const pData = tempCtx.getImageData(0, 0, 1, 1).data;
+                    ctx.fillStyle = `rgb(${pData[0]}, ${pData[1]}, ${pData[2]})`;
+                    const padX = img.width * 0.03, padY = img.height * 0.03;
+                    ctx.fillRect(ix - padX, iy - padY, iw + padX * 2, ih + padY * 2);
+                }
+                const drawKeys = ['mouth', 'nose', 'leftEyebrow', 'rightEyebrow', 'leftEye', 'rightEye'];
+                for (const key of drawKeys) {
+                    const ib = initialBoxes[key]; const nb = newBoxes[key]; if (!ib || !nb) continue;
+                    const ix = (ib.x / 100) * img.width, iy = (ib.y / 100) * img.height, iw = (ib.w / 100) * img.width, ih = (ib.h / 100) * img.height;
+                    const nx = (nb.x / 100) * img.width, ny = (nb.y / 100) * img.height, nw = (nb.w / 100) * img.width, nh = (nb.h / 100) * img.height;
+                    ctx.drawImage(img, ix, iy, iw, ih, nx, ny, nw, nh);
+                }
+                resolve(canvas.toDataURL('image/png'));
+            };
+            img.onerror = reject; img.src = imgUrl;
+        });
+    </script>
+
+    <script type="text/babel">
+        const { useState, useRef, useEffect, useCallback, useMemo } = React;
+        const { motion, AnimatePresence } = window.Motion;
+
+        // --- Icons ---
+        const IconUpload = () => <svg fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-10 h-10"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" /></svg>;
+        const IconSparkles = () => <svg fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" /></svg>;
+        const IconExport = () => <svg fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>;
+        const IconUndo = () => <svg fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3" /></svg>;
+        const IconRedo = () => <svg fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="m15 15 6-6m0 0-6-6m6 6H9a6 6 0 0 0 0 12h3" /></svg>;
+
+        const tweakOptionsMap = {
+            artStyle: { label: '畫風', opts: ['似顏繪', '日系動漫', '韓系動漫', '美系動漫', '真實系'] },
+            gender: { label: '性別', opts: ['女', '男', '中性'] },
+            race: { label: '種族', opts: ['無', '黃種人', '白種人', '棕種人', '黑種人'] },
+            hairStyle: { label: '後髮造型', opts: ['長髮', '短髮', '光頭', '無', '波浪', '短捲髮', '浪漫捲', '羊毛捲', '螺旋捲', '公主頭', '馬尾', '雙馬尾', '辮子頭', '包頭', '雙包頭', '髒辮', '髒辮馬尾', '雷鬼頭'] },
+            hairTie: { label: '後髮綁髮', opts: ['無', '低', '中', '高'] },
+            frontHair: { label: '前髮造型', opts: ['無', '中長髮', '長髮', '波浪捲', '捲髮', '浪漫捲', '羊毛捲', '螺旋捲', '公主切', '羽毛剪', '髒辮', '雷鬼頭'] },
+            frontHairParting: { label: '前髮分髮', opts: ['無', '中分', '左旁分', '右旁分', '左八二分', '右八二分', '全左', '全右'] },
+            bangs: { label: '瀏海造型', opts: ['無瀏海', '齊瀏海', '碎瀏海', '空氣瀏海', '法式瀏海', '八字瀏海'] },
+            bangsParting: { label: '瀏海分髮', opts: ['無', '中分', '左旁分', '右旁分', '左八二分', '右八二分', '全左', '全右'] },
+            bangsWidth: { label: '瀏海寬度', opts: ['自訂', '寬', '中', '窄'] },
+            hairColor: { label: '髮色', opts: ['黑', '白', '金', '棕', '紅', '藍', '綠', '紫', '粉紅', '銀'] },
+            eyebrows: { label: '眉形', opts: ['平眉', '粗眉', '細眉', '八字眉'] },
+            eyes: { label: '眼型', opts: ['大眼', '細長眼', '圓眼', '鳳眼', '下垂眼', '單眼皮', '雙眼皮'] },
+            irisColor: { label: '瞳色', opts: ['黑', '棕', '藍', '綠', '紅', '金', '紫', '異色瞳'] },
+            irisDetail: { label: '虹膜細節', opts: ['普通', '簡單', '精緻'] },
+            irisSize: { label: '眼仁大小', opts: ['中', '大', '小', '無'] },
+            irisShape: { label: '眼仁形狀', opts: ['圓型', '橢圓', '細橢圓'] },
+            pupilShape: { label: '瞳孔形狀', opts: ['圓型', '蛇瞳', '蛙瞳', '羊瞳', '星形', '心形'] },
+            eyeSparkle: { label: '眼睛光澤', opts: ['中', '強', '弱', '無光'] },
+            nose: { label: '鼻型', opts: ['小巧鼻', '高挺鼻', '圓鼻頭', '鷹鉤鼻'] },
+            mouth: { label: '唇型', opts: ['櫻桃小嘴', '薄唇', '厚唇', '寬嘴', '貓咪唇'] },
+            ears: { label: '耳朵', opts: ['一般', '貓耳', '精靈耳', '狐狸耳', '垂耳狗', '魚鰭耳', '兔耳'] },
+            skinTone: { label: '膚色', opts: ['白皙', '極白皙', '自然', '小麥色', '古銅色', '深色'] },
+            faceShape: { label: '臉型', opts: ['標準', '瓜子臉', '圓臉', '方臉', '長臉', '心形臉', '包子臉', '日系標準', '幼女/蘿莉', '御姐/成熟', '韓系標準', '韓系漫改女', '韓系漫改男'] },
+            feature: { label: '裝飾/特徵', opts: ['無', '鬼角', '惡魔角', '綿羊角', '鹿角', '鼻環', '唇環', '耳環', '面具', '眼罩', '眼鏡'] }
+        };
+
+        const LineH = ({ y, label, onDrag, color = 'bg-green-500', visible = true }) => visible ? (
+            <div className="absolute w-full cursor-ns-resize flex flex-col justify-center opacity-80 hover:opacity-100 z-40 transition-opacity" style={{ top: `calc(${y}% - 6px)`, height: '12px' }} onMouseDown={onDrag} onTouchStart={onDrag}>
+                <div className={`w-full h-[1px] ${color} shadow-[0_0_2px_#000]`}></div>
+                {label && <span className="absolute left-1 text-[9px] text-white bg-black/80 px-1 py-0.5 rounded">{label}</span>}
+            </div>
+        ) : null;
+
+        const LineV = ({ x, label, onDrag, color = 'bg-green-500', visible = true, align = 'top' }) => visible ? (
+            <div className="absolute h-full cursor-ew-resize flex justify-center opacity-80 hover:opacity-100 z-40 transition-opacity" style={{ left: `calc(${x}% - 6px)`, width: '12px' }} onMouseDown={onDrag} onTouchStart={onDrag}>
+                <div className={`h-full w-[1px] ${color} shadow-[0_0_2px_#000]`}></div>
+                {label && <span className={`absolute ${align==='top'?'top-2':'bottom-2'} text-[9px] text-white bg-black/80 px-1 py-0.5 rounded whitespace-nowrap`}>{label}</span>}
+            </div>
+        ) : null;
+
+        const App = () => {
+            const [imageHistory, setImageHistory] = useState([]); 
+            const [historyIndex, setHistoryIndex] = useState(-1);
+            const uploadedImage = useMemo(() => imageHistory[historyIndex]?.url || null, [imageHistory, historyIndex]);
+            
+            const [isUploading, setIsUploading] = useState(false);
+            const [error, setError] = useState(null);
+            const [inter, setInter] = useState(null);
+            const [isDrag, setIsDrag] = useState(false);
+            const imgConRef = useRef(null);
+            const tweakFileRef = useRef(null);
+            const jsonFileRef = useRef(null); 
+            
+            const [isEmbedded, setIsEmbedded] = useState(false);
+
+            const initialTweakParams = Object.fromEntries(Object.entries(tweakOptionsMap).map(([k, v]) => [k, v.opts[0]]));
+            initialTweakParams.deepEyeSockets = false;
+            initialTweakParams.prominentPhiltrum = false;
+            initialTweakParams.freckles = false;
+            initialTweakParams.blush = false;
+            initialTweakParams.highlights = false;
+            initialTweakParams.tearTroughs = false;
+            initialTweakParams.aegyoSal = false;
+            initialTweakParams.nasolabialFolds = false;
+            initialTweakParams.cleftChin = false;
+            initialTweakParams.hairPartingLine = false;
+            
+            const [faceTweakParams, setFaceTweakParams] = useState(initialTweakParams);
+            const [tweakOptions, setTweakOptions] = useState(tweakOptionsMap);
+            const [customPrompts, setCustomPrompts] = useState({}); 
+            const [activeGuideGroup, setActiveGuideGroup] = useState('face_shape');
+            const [activeSubGroup, setActiveSubGroup] = useState(null);
+
+            const defaultFaceGuides = {
+                centerX: 50, headTopY: 12, hairlineY: 27.5, frontHairRootY: 25.5, frontHairRootDx: 18, frontHairLengthY: 45, frontHairDx: 20,
+                bangsRootY: 27.5, bangsRootDx: 13, bangsLengthY: 45, bangsDx: 16, foreheadTopY: 22.4, foreheadBottomY: 41, foreheadTopDx: 21.1, foreheadBottomDx: 21.1,
+                eyebrowY: 42, eyebrowInnerDx: 6, eyebrowOuterDx: 16, eyeY: 48, eyeCenterDx: 11, eyeDy: 3.5, eyeDx: 5.5, eyeOuterDy: 0,
+                cheekboneDx: 20.5, cheekboneY: 52, cheekboneDy: 4, noseY: 60, noseDx: 2.5, mouthY: 67, mouthUpperDy: 1.5, mouthLowerDy: 2.5, mouthDx: 5.5, mouthCornerDy: -0.5,
+                jawUpperY: 62.5, jawUpperDx: 19.5, jawLowerY: 68, jawLowerDx: 15, chinY: 77.5, chinBottomY: 78.5, chinDx: 2.5
+            };
+            const [faceGuides, setFaceGuides] = useState(defaultFaceGuides);
+            const [initialFaceGuides, setInitialFaceGuides] = useState(defaultFaceGuides);
+
+            const baseG = defaultFaceGuides;
+            const faceSliders = useMemo(() => [
+                { k: 'hairlineY', l: '髮際線', min: -3, max: 3, grp: 'hair', subGrp: '髮際線' },
+                { k: 'frontHairRootY', l: '前髮根部高度', min: -10, max: 10, grp: 'hair', subGrp: '前髮' },
+                { k: 'frontHairRootDx', l: '前髮根部寬度', min: -10, max: 10, grp: 'hair', subGrp: '前髮' },
+                { k: 'frontHairLengthY', l: '前髮長度', min: -10, max: 50, grp: 'hair', subGrp: '前髮' },
+                { k: 'frontHairDx', l: '前髮寬度', min: -10, max: 10, grp: 'hair', subGrp: '前髮' },
+                { k: 'bangsRootY', l: '瀏海根部高度', min: -10, max: 10, grp: 'hair', subGrp: '瀏海' },
+                { k: 'bangsRootDx', l: '瀏海根部寬度', min: -5, max: 5, grp: 'hair', subGrp: '瀏海' },
+                { k: 'bangsLengthY', l: '瀏海長度', min: -10, max: 10, grp: 'hair', subGrp: '瀏海' },
+                { k: 'bangsDx', l: '瀏海寬度', min: -5, max: 5, grp: 'hair', subGrp: '瀏海' },
+                { k: 'headTopY', l: '頭部高度', grp: 'face_shape', subGrp: '頭部' },
+                { k: 'foreheadTopY', l: '額頭上圍高度', grp: 'face_shape', subGrp: '額頭' },
+                { k: 'foreheadBottomY', l: '額頭下圍高度', grp: 'face_shape', subGrp: '額頭' },
+                { k: 'foreheadTopDx', l: '額頭上圍寬度', grp: 'face_shape', subGrp: '額頭' },
+                { k: 'foreheadBottomDx', l: '額頭下圍寬度', grp: 'face_shape', subGrp: '額頭' },
+                { k: 'cheekboneY', l: '顴骨高度', grp: 'face_shape', subGrp: '顴骨' },
+                { k: 'cheekboneDy', l: '顴骨大小', grp: 'face_shape', subGrp: '顴骨' },
+                { k: 'cheekboneDx', l: '顴骨寬度', grp: 'face_shape', subGrp: '顴骨' },
+                { k: 'jawUpperY', l: '下顎後端高度', grp: 'face_shape', subGrp: '下顎' },
+                { k: 'jawUpperDx', l: '下顎後端寬度', grp: 'face_shape', subGrp: '下顎' },
+                { k: 'jawLowerY', l: '下顎低端高度', grp: 'face_shape', subGrp: '下顎' },
+                { k: 'jawLowerDx', l: '下顎低端寬度', grp: 'face_shape', subGrp: '下顎' },
+                { k: 'chinY', l: '下巴高度', grp: 'face_shape', subGrp: '下巴' },
+                { k: 'chinBottomY', l: '下巴底端', grp: 'face_shape', subGrp: '下巴' },
+                { k: 'chinDx', l: '下巴寬度', grp: 'face_shape', subGrp: '下巴' },
+                { k: 'eyebrowY', l: '眉毛高度', grp: 'facial_features', subGrp: '眉毛' },
+                { k: 'eyebrowInnerDx', l: '眉毛距離', grp: 'facial_features', subGrp: '眉毛', custom: (v, b) => ({ eyebrowInnerDx: Math.max(0, Math.min(50, b.eyebrowInnerDx + v)), eyebrowOuterDx: Math.max(0, Math.min(50, b.eyebrowOuterDx + v)) }) },
+                { k: 'eyeY', l: '眼睛高度', grp: 'facial_features', subGrp: '眼睛' },
+                { k: 'eyeCenterDx', l: '眼睛距離', grp: 'facial_features', subGrp: '眼睛' },
+                { k: 'noseY', l: '鼻子高度', grp: 'facial_features', subGrp: '鼻子' },
+                { k: 'noseDx', l: '鼻子大小', grp: 'facial_features', subGrp: '鼻子' },
+                { k: 'mouthY', l: '嘴巴位置', grp: 'facial_features', subGrp: '嘴巴' },
+                { k: 'mouthDx', l: '嘴巴寬度', grp: 'facial_features', subGrp: '嘴巴' },
+                { k: 'mouthUpperDy', l: '上唇厚度', grp: 'facial_features', subGrp: '嘴巴' },
+                { k: 'mouthLowerDy', l: '下唇厚度', grp: 'facial_features', subGrp: '嘴巴' }
+            ], []);
+
+            const activeSliders = useMemo(() => faceSliders.filter(s => s.grp === activeGuideGroup), [faceSliders, activeGuideGroup]);
+            const hasSubGrp = activeSliders.some(s => s.subGrp);
+            const subGrpOrder = useMemo(() => ['頭部', '額頭', '顴骨', '下顎', '下巴', '眉毛', '眼睛', '鼻子', '嘴巴', '髮際線', '前髮', '瀏海'], []);
+            
+            let currentActiveSubGrp = activeSubGroup;
+            if (hasSubGrp && currentActiveSubGrp && !activeSliders.some(s => s.subGrp === currentActiveSubGrp)) currentActiveSubGrp = null;
+
+            const sGuide = useCallback((grp, subGrp = null) => {
+                if (activeGuideGroup !== grp) return false;
+                if (subGrp) return currentActiveSubGrp === subGrp;
+                return true;
+            }, [activeGuideGroup, currentActiveSubGrp]);
+
+            // --- PostMessage 初始化與資料接收 ---
+            useEffect(() => {
+                if (window.parent !== window) setIsEmbedded(true);
+                
+                const handleMessage = async (e) => {
+                    // 接收初始化圖片
+                    if (e.data?.type === 'INIT_FACECRAFT' && e.data.initialImage) {
+                        try {
+                            setIsUploading(true);
+                            const resized = await window.cropAndResizeToSquare(e.data.initialImage, 2048);
+                            setImageHistory([{ url: resized, properties: null }]);
+                            setHistoryIndex(0);
+                        } catch (err) { console.error(err); } 
+                        finally { setIsUploading(false); }
+                    }
+                };
+                window.addEventListener('message', handleMessage);
+                return () => window.removeEventListener('message', handleMessage);
+            }, []);
+
+            const exportResult = () => {
+                if (!uploadedImage) return;
+                if (isEmbedded) {
+                    window.parent.postMessage({ type: 'FACECRAFT_RESULT', dataUrl: uploadedImage }, '*');
+                } else {
+                    const a = document.createElement('a');
+                    a.href = uploadedImage;
+                    a.download = 'facecraft-avatar.png';
+                    a.click();
+                }
+            };
+
+            const handleJsonUpload = (e) => {
+                const file = e.target.files?.[0]; if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const data = JSON.parse(event.target.result);
+                        if (data.options) {
+                            setTweakOptions(prev => {
+                                const next = JSON.parse(JSON.stringify(prev));
+                                for (const k in data.options) {
+                                    if (next[k]) {
+                                        next[k].opts = Array.from(new Set([...next[k].opts, ...data.options[k].opts]));
+                                    }
+                                }
+                                return next;
+                            });
+                        }
+                        if (data.prompts) {
+                            setCustomPrompts(prev => ({ ...prev, ...data.prompts }));
+                        }
+                        alert("設定檔載入成功！已成功擴充選單與提示詞。");
+                    } catch (err) {
+                        alert("JSON 解析失敗: " + err.message);
+                    }
+                };
+                reader.readAsText(file);
+                if (jsonFileRef.current) jsonFileRef.current.value = '';
+            };
+
+            const drawFaceBlueprint = (g, t) => {
+                const c = document.createElement('canvas'); c.width = 1024; c.height = 1024; const ctx = c.getContext('2d');
+                ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, 1024, 1024);
+                const s = (val) => (val / 100) * 1024;
+                ctx.strokeStyle = '#000000'; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+                ctx.beginPath();
+                ctx.moveTo(s(g.centerX), s(g.headTopY));
+                ctx.bezierCurveTo(s(g.centerX + g.foreheadTopDx * 0.6), s(g.headTopY), s(g.centerX + g.foreheadTopDx), s(g.foreheadTopY), s(g.centerX + (g.foreheadTopDx + g.foreheadBottomDx) / 2), s((g.foreheadTopY + g.foreheadBottomY) / 2));
+                ctx.bezierCurveTo(s(g.centerX + g.foreheadBottomDx), s(g.foreheadBottomY), s(g.centerX + g.cheekboneDx), s(g.cheekboneY - g.cheekboneDy), s(g.centerX + g.cheekboneDx), s(g.cheekboneY));
+                ctx.bezierCurveTo(s(g.centerX + g.jawUpperDx), s(g.jawUpperY), s(g.centerX + g.jawLowerDx), s(g.jawLowerY), s(g.centerX + g.chinDx), s(g.chinY));
+                ctx.quadraticCurveTo(s(g.centerX), s(g.chinBottomY), s(g.centerX - g.chinDx), s(g.chinY));
+                ctx.bezierCurveTo(s(g.centerX - g.jawLowerDx), s(g.jawLowerY), s(g.centerX - g.jawUpperDx), s(g.jawUpperY), s(g.centerX - g.cheekboneDx), s(g.cheekboneY));
+                ctx.bezierCurveTo(s(g.centerX - g.cheekboneDx), s(g.cheekboneY - g.cheekboneDy), s(g.centerX - g.foreheadBottomDx), s(g.foreheadBottomY), s(g.centerX - (g.foreheadTopDx + g.foreheadBottomDx) / 2), s((g.foreheadTopY + g.foreheadBottomY) / 2));
+                ctx.bezierCurveTo(s(g.centerX - g.foreheadTopDx), s(g.foreheadTopY), s(g.centerX - g.foreheadTopDx * 0.6), s(g.headTopY), s(g.centerX), s(g.headTopY));
+                ctx.closePath(); 
+                ctx.fillStyle = '#FFFFFF'; ctx.fill(); 
+                ctx.stroke();
+
+                ctx.lineWidth = 4; ctx.strokeStyle = '#000000'; ctx.fillStyle = '#FFFFFF';
+                ctx.beginPath(); ctx.moveTo(s(g.centerX - 20.5), s(48)); ctx.bezierCurveTo(s(g.centerX - 26.5), s(44), s(g.centerX - 25.5), s(60.5), s(g.centerX - 19.5), s(62.5)); ctx.fill(); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(s(g.centerX + 20.5), s(48)); ctx.bezierCurveTo(s(g.centerX + 26.5), s(44), s(g.centerX + 25.5), s(60.5), s(g.centerX + 19.5), s(62.5)); ctx.fill(); ctx.stroke();
+
+                if (t.hairStyle !== '光頭') {
+                    ctx.fillStyle = '#000000';
+                    ctx.beginPath();
+                    ctx.moveTo(s(g.centerX - g.foreheadBottomDx), s(g.foreheadBottomY));
+                    ctx.quadraticCurveTo(s(g.centerX - g.foreheadTopDx * 0.9), s(g.hairlineY - 1.5), s(g.centerX - g.foreheadTopDx * 0.35), s(g.hairlineY - 1.5));
+                    ctx.quadraticCurveTo(s(g.centerX - g.foreheadTopDx * 0.1), s(g.hairlineY - 1.5), s(g.centerX), s(g.hairlineY + 2.5));
+                    ctx.quadraticCurveTo(s(g.centerX + g.foreheadTopDx * 0.1), s(g.hairlineY - 1.5), s(g.centerX + g.foreheadTopDx * 0.35), s(g.hairlineY - 1.5));
+                    ctx.quadraticCurveTo(s(g.centerX + g.foreheadTopDx * 0.9), s(g.hairlineY - 1.5), s(g.centerX + g.foreheadBottomDx), s(g.foreheadBottomY));
+                    ctx.bezierCurveTo(s(g.centerX + g.foreheadTopDx), s(g.foreheadTopY), s(g.centerX + g.foreheadTopDx * 0.6), s(g.headTopY), s(g.centerX), s(g.headTopY));
+                    ctx.bezierCurveTo(s(g.centerX - g.foreheadTopDx * 0.6), s(g.headTopY), s(g.centerX - g.foreheadTopDx), s(g.foreheadTopY), s(g.centerX - g.foreheadBottomDx), s(g.foreheadBottomY));
+                    ctx.fill();
+                    
+                    ctx.lineWidth = 1.5; ctx.strokeStyle = '#000000';
+                    ctx.beginPath();
+                    ctx.moveTo(s(g.centerX - g.foreheadBottomDx), s(g.foreheadBottomY));
+                    ctx.quadraticCurveTo(s(g.centerX - g.foreheadTopDx * 0.9), s(g.hairlineY - 1.5), s(g.centerX - g.foreheadTopDx * 0.35), s(g.hairlineY - 1.5));
+                    ctx.quadraticCurveTo(s(g.centerX - g.foreheadTopDx * 0.1), s(g.hairlineY - 1.5), s(g.centerX), s(g.hairlineY + 2.5));
+                    ctx.quadraticCurveTo(s(g.centerX + g.foreheadTopDx * 0.1), s(g.hairlineY - 1.5), s(g.centerX + g.foreheadTopDx * 0.35), s(g.hairlineY - 1.5));
+                    ctx.quadraticCurveTo(s(g.centerX + g.foreheadTopDx * 0.9), s(g.hairlineY - 1.5), s(g.centerX + g.foreheadBottomDx), s(g.foreheadBottomY));
+                    ctx.stroke();
+                }
+
+                ctx.fillStyle = '#000000';
+                if (t.frontHair !== '無') {
+                    const isBlocky = t.frontHair === '公主切'; let innerOffset = isBlocky ? 15 : 8;
+                    ctx.beginPath(); ctx.moveTo(s(g.centerX - g.frontHairRootDx), s(g.frontHairRootY));
+                    let leftOuterCpX = g.centerX - Math.max(g.frontHairRootDx, g.frontHairDx) - 6; 
+                    ctx.quadraticCurveTo(s(leftOuterCpX), s(g.eyeY), s(g.centerX - g.frontHairDx), s(g.frontHairLengthY));
+                    let leftTipX = g.centerX - g.frontHairDx + (isBlocky?12:6); ctx.lineTo(s(leftTipX), s(g.frontHairLengthY - 2));
+                    let leftRootX = g.centerX - g.frontHairRootDx + innerOffset;
+                    if (isBlocky) ctx.quadraticCurveTo(s(Math.max(leftRootX, leftTipX) + 6), s(g.eyeY), s(leftRootX), s(g.frontHairRootY));
+                    else ctx.quadraticCurveTo(s(g.centerX - g.frontHairDx * 0.8), s(g.eyeY), s(leftRootX), s(g.frontHairRootY));
+                    ctx.closePath(); ctx.fill(); ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 2; ctx.stroke();
+                    
+                    ctx.beginPath(); ctx.moveTo(s(g.centerX + g.frontHairRootDx), s(g.frontHairRootY));
+                    let rightOuterCpX = g.centerX + Math.max(g.frontHairRootDx, g.frontHairDx) + 6; 
+                    ctx.quadraticCurveTo(s(rightOuterCpX), s(g.eyeY), s(g.centerX + g.frontHairDx), s(g.frontHairLengthY));
+                    let rightTipX = g.centerX + g.frontHairDx - (isBlocky?12:6); ctx.lineTo(s(rightTipX), s(g.frontHairLengthY - 2));
+                    let rightRootX = g.centerX + g.frontHairRootDx - innerOffset;
+                    if (isBlocky) ctx.quadraticCurveTo(s(Math.min(rightRootX, rightTipX) - 6), s(g.eyeY), s(rightRootX), s(g.frontHairRootY));
+                    else ctx.quadraticCurveTo(s(g.centerX + g.frontHairDx * 0.8), s(g.eyeY), s(rightRootX), s(g.frontHairRootY));
+                    ctx.closePath(); ctx.fill(); ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 2; ctx.stroke();
+                }
+
+                if (t.bangs !== '無瀏海') {
+                    if (g.bangsRootY > g.hairlineY) {
+                        ctx.fillStyle = '#000000'; ctx.beginPath();
+                        ctx.moveTo(s(g.centerX - g.bangsRootDx), s(g.bangsRootY));
+                        ctx.lineTo(s(g.centerX - g.bangsRootDx * 0.5), s(g.hairlineY - 1)); ctx.lineTo(s(g.centerX + g.bangsRootDx * 0.5), s(g.hairlineY - 1));
+                        ctx.lineTo(s(g.centerX + g.bangsRootDx), s(g.bangsRootY)); ctx.fill();
+                    }
+
+                    const isCenterPart = t.bangs === '八字瀏海' || (t.bangsParting && t.bangsParting.includes('中分'));
+                    const isSidePart = t.bangsParting && t.bangsParting.includes('旁分');
+
+                    if (isCenterPart) {
+                        ctx.beginPath(); ctx.moveTo(s(g.centerX - 2), s(g.bangsRootY)); ctx.quadraticCurveTo(s(g.centerX - g.bangsRootDx/2), s(g.bangsRootY - 2), s(g.centerX - g.bangsRootDx), s(g.bangsRootY)); ctx.quadraticCurveTo(s(g.centerX - g.bangsDx * 1.1), s((g.bangsRootY + g.bangsLengthY)/2), s(g.centerX - g.bangsDx), s(g.bangsLengthY)); ctx.quadraticCurveTo(s(g.centerX - g.bangsDx * 0.5), s(g.bangsLengthY - 3), s(g.centerX - 5), s(g.bangsLengthY - 8)); ctx.quadraticCurveTo(s(g.centerX - 8), s((g.bangsRootY + g.bangsLengthY)/2), s(g.centerX - 2), s(g.bangsRootY)); ctx.fill(); ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 2; ctx.stroke();
+                        ctx.beginPath(); ctx.moveTo(s(g.centerX + 2), s(g.bangsRootY)); ctx.quadraticCurveTo(s(g.centerX + g.bangsRootDx/2), s(g.bangsRootY - 2), s(g.centerX + g.bangsRootDx), s(g.bangsRootY)); ctx.quadraticCurveTo(s(g.centerX + g.bangsDx * 1.1), s((g.bangsRootY + g.bangsLengthY)/2), s(g.centerX + g.bangsDx), s(g.bangsLengthY)); ctx.quadraticCurveTo(s(g.centerX + g.bangsDx * 0.5), s(g.bangsLengthY - 3), s(g.centerX + 5), s(g.bangsLengthY - 8)); ctx.quadraticCurveTo(s(g.centerX + 8), s((g.bangsRootY + g.bangsLengthY)/2), s(g.centerX + 2), s(g.bangsRootY)); ctx.fill(); ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 2; ctx.stroke();
+                    } else if (isSidePart) {
+                        const sweepDir = t.bangsParting.includes('左') ? -1 : 1; let partX = g.centerX + (g.bangsRootDx * 0.4 * sweepDir);
+                        ctx.beginPath(); ctx.moveTo(s(partX), s(g.bangsRootY)); ctx.quadraticCurveTo(s(g.centerX), s(g.bangsRootY - 2), s(g.centerX - g.bangsRootDx * sweepDir), s(g.bangsRootY)); ctx.quadraticCurveTo(s(g.centerX - g.bangsDx * sweepDir * 1.1), s((g.bangsRootY + g.bangsLengthY)/2), s(g.centerX - g.bangsDx * sweepDir), s(g.bangsLengthY)); ctx.quadraticCurveTo(s(g.centerX), s(g.bangsLengthY - 3), s(partX - 6 * sweepDir), s(g.bangsRootY + 10)); ctx.fill(); ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 2; ctx.stroke();
+                        ctx.beginPath(); ctx.moveTo(s(partX + 3 * sweepDir), s(g.bangsRootY)); ctx.quadraticCurveTo(s(g.centerX + g.bangsRootDx * sweepDir), s(g.bangsRootY - 1), s(g.centerX + g.bangsRootDx * sweepDir), s(g.bangsRootY)); ctx.quadraticCurveTo(s(g.centerX + g.bangsDx * sweepDir * 1.1), s((g.bangsRootY + g.bangsLengthY)/2), s(g.centerX + g.bangsDx * sweepDir * 0.8), s(g.bangsLengthY - 4)); ctx.quadraticCurveTo(s(partX + 6 * sweepDir), s(g.bangsRootY + 8), s(partX + 3 * sweepDir), s(g.bangsRootY)); ctx.fill(); ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 2; ctx.stroke();
+                    } else {
+                        ctx.beginPath(); let rootLeftX = g.centerX - g.bangsRootDx; let rootRightX = g.centerX + g.bangsRootDx;
+                        ctx.moveTo(s(rootLeftX), s(g.bangsRootY)); ctx.quadraticCurveTo(s(g.centerX), s(g.bangsRootY - 2), s(rootRightX), s(g.bangsRootY));
+                        let isThickBangs = ['齊瀏海'].includes(t.bangs);
+                        if (isThickBangs) { let rightCpX = g.centerX + Math.max(g.bangsRootDx, g.bangsDx) + 6; ctx.quadraticCurveTo(s(rightCpX), s((g.bangsRootY + g.bangsLengthY)/2), s(g.centerX + g.bangsDx), s(g.bangsLengthY)); } else { ctx.lineTo(s(g.centerX + g.bangsDx), s(g.bangsLengthY)); }
+                        const tipSteps = 24;
+                        for(let i = tipSteps - 1; i >= 0; i--) {
+                            let p = i / tipSteps; let curX = (g.centerX - g.bangsDx) + (g.bangsDx * 2) * p; let lengthMod = 0;
+                            if (t.bangs === '碎瀏海') lengthMod = (i % 2 === 0) ? -3 : 2; else if (t.bangs === '空氣瀏海') lengthMod = (i % 2 === 0) ? -4 : 0.5; else lengthMod = (i % 2 === 0) ? -1 : 0.5; 
+                            ctx.lineTo(s(curX), s(g.bangsLengthY + lengthMod));
+                        }
+                        if (isThickBangs) { let leftCpX = g.centerX - Math.max(g.bangsRootDx, g.bangsDx) - 6; ctx.quadraticCurveTo(s(leftCpX), s((g.bangsRootY + g.bangsLengthY)/2), s(rootLeftX), s(g.bangsRootY)); } else { ctx.lineTo(s(rootLeftX), s(g.bangsRootY)); }
+                        ctx.fill(); ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 2; ctx.stroke();
+                    }
+                }
+
+                if (t.hairPartingLine && t.hairStyle !== '光頭') {
+                    let partX = g.centerX; let curveDir = 0; const pType = (t.bangs !== '無瀏海' && t.bangsParting && t.bangsParting !== '無') ? t.bangsParting : (t.frontHairParting || '');
+                    if (pType.includes('左旁分')) { partX = g.centerX - g.bangsRootDx * 0.4; curveDir = -2; } else if (pType.includes('右旁分')) { partX = g.centerX + g.bangsRootDx * 0.4; curveDir = 2; } else if (pType.includes('左八二分')) { partX = g.centerX - g.bangsRootDx * 0.7; curveDir = -3; } else if (pType.includes('右八二分')) { partX = g.centerX + g.bangsRootDx * 0.7; curveDir = 3; } else if (pType.includes('全左')) { partX = g.centerX - g.bangsRootDx * 0.9; curveDir = -4; } else if (pType.includes('全右')) { partX = g.centerX + g.bangsRootDx * 0.9; curveDir = 4; }
+                    const partWidth = 12; const startY = g.bangsRootY; const endY = g.headTopY + (g.hairlineY - g.headTopY) * 0.3; const endX = partX + curveDir * 2.5; 
+                    ctx.beginPath(); ctx.moveTo(s(partX - partWidth/2), s(startY + 3)); ctx.bezierCurveTo(s(partX - partWidth/4 + curveDir), s(startY - 5), s(endX - 1.5), s(endY + 6), s(endX), s(endY)); ctx.bezierCurveTo(s(endX + 1.5), s(endY + 6), s(partX + partWidth/4 + curveDir), s(startY - 5), s(partX + partWidth/2), s(startY + 3)); ctx.quadraticCurveTo(s(partX), s(startY + 6), s(partX - partWidth/2), s(startY + 3)); ctx.closePath(); ctx.fillStyle = '#FFFFFF'; ctx.fill();
+                    ctx.beginPath(); ctx.moveTo(s(partX - partWidth/2), s(startY + 3)); ctx.bezierCurveTo(s(partX - partWidth/4 + curveDir), s(startY - 5), s(endX - 1.5), s(endY + 6), s(endX), s(endY)); ctx.bezierCurveTo(s(endX + 1.5), s(endY + 6), s(partX + partWidth/4 + curveDir), s(startY - 5), s(partX + partWidth/2), s(startY + 3)); ctx.strokeStyle = '#000000'; ctx.lineWidth = 3.5; ctx.lineCap = 'round'; ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(s(partX), s(startY + 2)); ctx.quadraticCurveTo(s(partX + curveDir), s((startY+endY)/2), s(endX), s(endY)); ctx.strokeStyle = '#000000'; ctx.lineWidth = 0.8; ctx.stroke();
+                }
+
+                ctx.strokeStyle = '#000000'; ctx.lineWidth = 4; 
+                const neckW = 8.8; const neckStartY = g.jawLowerY + (g.chinY - g.jawLowerY) * 0.75;
+                ctx.lineWidth = 5;
+                ctx.beginPath(); ctx.moveTo(s(g.centerX - neckW), s(neckStartY)); ctx.lineTo(s(g.centerX - neckW), s(88)); ctx.quadraticCurveTo(s(g.centerX - 14.5), s(95), s(g.centerX - 37.5), s(100)); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(s(g.centerX + neckW), s(neckStartY)); ctx.lineTo(s(g.centerX + neckW), s(88)); ctx.quadraticCurveTo(s(g.centerX + 14.5), s(95), s(g.centerX + 37.5), s(100)); ctx.stroke();
+                ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.moveTo(s(g.centerX - 20.3), s(96)); ctx.quadraticCurveTo(s(g.centerX - 5.75), s(98), s(g.centerX), s(95)); ctx.quadraticCurveTo(s(g.centerX + 5.75), s(98), s(g.centerX + 20.3), s(96)); ctx.stroke();
+
+                ctx.lineWidth = 6;
+                ctx.beginPath(); ctx.moveTo(s(g.centerX - g.eyeCenterDx - g.eyeDx), s(g.eyeY)); ctx.quadraticCurveTo(s(g.centerX - g.eyeCenterDx), s(g.eyeY - g.eyeDy*1.5), s(g.centerX - g.eyeCenterDx + g.eyeDx), s(g.eyeY)); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(s(g.centerX + g.eyeCenterDx - g.eyeDx), s(g.eyeY)); ctx.quadraticCurveTo(s(g.centerX + g.eyeCenterDx), s(g.eyeY - g.eyeDy*1.5), s(g.centerX + g.eyeCenterDx + g.eyeDx), s(g.eyeY)); ctx.stroke();
+                ctx.lineWidth = 3;
+                ctx.beginPath(); ctx.moveTo(s(g.centerX - g.eyeCenterDx - g.eyeDx + 1), s(g.eyeY + g.eyeDy*0.5)); ctx.quadraticCurveTo(s(g.centerX - g.eyeCenterDx), s(g.eyeY + g.eyeDy), s(g.centerX - g.eyeCenterDx + g.eyeDx - 1), s(g.eyeY + g.eyeDy*0.5)); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(s(g.centerX + g.eyeCenterDx - g.eyeDx + 1), s(g.eyeY + g.eyeDy*0.5)); ctx.quadraticCurveTo(s(g.centerX + g.eyeCenterDx), s(g.eyeY + g.eyeDy), s(g.centerX + g.eyeCenterDx + g.eyeDx - 1), s(g.eyeY + g.eyeDy*0.5)); ctx.stroke();
+                ctx.fillStyle = '#000000'; 
+                ctx.beginPath(); ctx.arc(s(g.centerX - g.eyeCenterDx), s(g.eyeY), s(Math.max(0.5, g.eyeDy * 0.3)), 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(s(g.centerX + g.eyeCenterDx), s(g.eyeY), s(Math.max(0.5, g.eyeDy * 0.3)), 0, Math.PI * 2); ctx.fill();
+
+                ctx.lineWidth = 5;
+                ctx.beginPath(); ctx.moveTo(s(g.centerX - g.eyebrowOuterDx), s(g.eyebrowY)); ctx.quadraticCurveTo(s(g.centerX - (g.eyebrowOuterDx+g.eyebrowInnerDx)/2), s(g.eyebrowY - 2), s(g.centerX - g.eyebrowInnerDx), s(g.eyebrowY)); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(s(g.centerX + g.eyebrowInnerDx), s(g.eyebrowY)); ctx.quadraticCurveTo(s(g.centerX + (g.eyebrowOuterDx+g.eyebrowInnerDx)/2), s(g.eyebrowY - 2), s(g.centerX + g.eyebrowOuterDx), s(g.eyebrowY)); ctx.stroke();
+
+                ctx.lineWidth = 4;
+                ctx.beginPath(); ctx.moveTo(s(g.centerX - 1), s(g.noseY)); ctx.quadraticCurveTo(s(g.centerX), s(g.noseY + 2), s(g.centerX + 1), s(g.noseY)); ctx.stroke();
+
+                ctx.beginPath(); ctx.moveTo(s(g.centerX - g.mouthDx), s(g.mouthY + g.mouthCornerDy)); ctx.quadraticCurveTo(s(g.centerX), s(g.mouthY - g.mouthUpperDy), s(g.centerX + g.mouthDx), s(g.mouthY + g.mouthCornerDy)); ctx.stroke();
+                ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.moveTo(s(g.centerX - g.mouthDx + 2), s(g.mouthY + g.mouthCornerDy + 1)); ctx.quadraticCurveTo(s(g.centerX), s(g.mouthY + g.mouthLowerDy), s(g.centerX + g.mouthDx - 2), s(g.mouthY + g.mouthCornerDy + 1)); ctx.stroke();
+                
+                return c.toDataURL('image/png');
+            };
+
+            const handleTweakUpload = async (e) => {
+                const file = e.target.files?.[0]; if (!file) return;
+                if (tweakFileRef.current) tweakFileRef.current.value = '';
+                setIsUploading(true); setError(null);
+                try {
+                    const rawDataUrl = await window.toBase64(file);
+                    const featurePromise = window.detectFacialFeaturesAI(rawDataUrl, tweakOptions);
+                    const { mimeType, data } = window.processDataUrl(rawDataUrl);
+                    const blueprintUrl = drawFaceBlueprint(defaultFaceGuides, initialTweakParams);
+                    const { mimeType: bpMime, data: bpData } = window.processDataUrl(blueprintUrl);
+                    
+                    const prepPrompt = "IMAGE 1 is the subject photo. IMAGE 2 is the STRICT structural blueprint. Transform IMAGE 1 into a highly detailed 2.5D anime style portrait. CRITICAL ALIGNMENT REQUIREMENTS: 1. You MUST lock the exact placement, silhouette, width, and height of the jawline, cheeks, chin, ears, eyes, eyebrows, nose, and mouth exactly 1:1 to the blueprint in IMAGE 2. 2. EXACT FACIAL POSITIONING (0-100 scale): Center X=50, Eyes Y=48, Nose bottom Y=60, Mouth center Y=67, Chin bottom Y=78. 3. STRICTLY PERFECTLY FRONT-FACING and perfectly symmetrical headshot. 4. Pure white background. 5. Neutral expression. 6. Maintain the subject's exact identity, facial features, gender, and hair style. Use the blueprint (IMAGE 2) ONLY to align the facial proportions and positions.";
+                    const alignPromise = window.generateImageWithRetry({ contents: [{ parts: [{ text: prepPrompt }, { inlineData: { mimeType, data } }, { inlineData: { mimeType: bpMime, data: bpData } }] }], generationConfig: { responseModalities: ['TEXT', 'IMAGE'] } });
+                    
+                    const [features, normalizedImgUrl] = await Promise.all([featurePromise, alignPromise]);
+
+                    if (features) {
+                        setTweakOptions(prev => {
+                            const next = JSON.parse(JSON.stringify(prev)); let updated = false;
+                            for (const [k, v] of Object.entries(features)) {
+                                if (next[k] && typeof v === 'string' && v.trim() !== '' && v !== '未知' && v !== 'None' && v !== 'null') {
+                                    const cleanV = v.trim();
+                                    if (!next[k].opts.includes(cleanV)) { next[k].opts.push(cleanV); updated = true; }
+                                }
+                            }
+                            return updated ? next : prev;
+                        });
+                        setFaceTweakParams(prev => {
+                            const next = { ...prev };
+                            for (const [k, v] of Object.entries(features)) {
+                                if (typeof v === 'string' && v.trim() !== '' && v !== '未知' && v !== 'None' && v !== 'null') next[k] = v.trim();
+                            }
+                            return next;
+                        });
+                    }
+
+                    const resizedUrl = await window.resizeImage(normalizedImgUrl, 2048, 2048);
+                    const aiGuides = await window.detectFaceGuidesAI(resizedUrl);
+                    let finalAlignedUrl = resizedUrl;
+                    
+                    if (aiGuides && aiGuides.chinY && aiGuides.eyeY) {
+                        const faceH_ai = aiGuides.chinY - aiGuides.eyeY; const faceH_def = defaultFaceGuides.chinY - defaultFaceGuides.eyeY;
+                        let scale = 1.0; if (faceH_ai > 10 && faceH_def > 10) scale = Math.min(Math.max(faceH_def / faceH_ai, 0.92), 1.08);
+                        const img = new Image(); img.crossOrigin = 'Anonymous'; img.src = resizedUrl;
+                        await new Promise(r => { img.onload = r; img.onerror = r; });
+                        const aiCenterX = 50; const aiMidY = (aiGuides.eyeY + aiGuides.chinY) / 2; const defMidY = (defaultFaceGuides.eyeY + defaultFaceGuides.chinY) / 2;
+                        let offsetX_pct = Math.min(Math.max(defaultFaceGuides.centerX - (aiCenterX * scale), -10), 10);
+                        let offsetY_pct = Math.min(Math.max(defMidY - (aiMidY * scale), -15), 15); 
+                        const c = document.createElement('canvas'); c.width = 2048; c.height = 2048; const ctx = c.getContext('2d');
+                        ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, 2048, 2048); ctx.drawImage(img, (offsetX_pct / 100) * 2048, (offsetY_pct / 100) * 2048, 2048 * scale, 2048 * scale);
+                        finalAlignedUrl = c.toDataURL('image/png');
+                    }
+                    setImageHistory([{ url: finalAlignedUrl, properties: null }]); setHistoryIndex(0);
+                    setInitialFaceGuides({...defaultFaceGuides}); setFaceGuides({...defaultFaceGuides});
+                } catch (err) {
+                    try {
+                        const rawDataUrl = await window.toBase64(file); const aiGuides = await window.detectFaceGuidesAI(rawDataUrl); let finalFallbackUrl = rawDataUrl; let isAligned = false;
+                        if (aiGuides && aiGuides.chinY && aiGuides.eyeY) {
+                            const faceH_ai = aiGuides.chinY - aiGuides.eyeY; const faceH_def = defaultFaceGuides.chinY - defaultFaceGuides.eyeY;
+                            let scale = 1.0; if (faceH_ai > 10 && faceH_def > 10) scale = Math.min(Math.max(faceH_def / faceH_ai, 0.92), 1.08);
+                            const img = new Image(); img.crossOrigin = 'Anonymous'; img.src = rawDataUrl; await new Promise(r => { img.onload = r; img.onerror = r; });
+                            const aiMidY = (aiGuides.eyeY + aiGuides.chinY) / 2; const defMidY = (defaultFaceGuides.eyeY + defaultFaceGuides.chinY) / 2;
+                            const c = document.createElement('canvas'); c.width = 2048; c.height = 2048; const ctx = c.getContext('2d');
+                            ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, 2048, 2048); ctx.drawImage(img, ((Math.min(Math.max(defaultFaceGuides.centerX - (50 * scale), -10), 10)) / 100) * 2048, ((Math.min(Math.max(defMidY - (aiMidY * scale), -15), 15)) / 100) * 2048, 2048 * scale, 2048 * scale);
+                            finalFallbackUrl = c.toDataURL('image/png'); isAligned = true;
+                        }
+                        setImageHistory([{ url: isAligned ? finalFallbackUrl : rawDataUrl, properties: null }]); setHistoryIndex(0);
+                        setInitialFaceGuides({...defaultFaceGuides}); setFaceGuides({...defaultFaceGuides});
+                    } catch(e) {
+                        setInitialFaceGuides({...defaultFaceGuides}); setFaceGuides({...defaultFaceGuides});
+                    }
+                } finally { setIsUploading(false); setActiveGuideGroup('face_shape'); }
+            };
+
+            const hdGuideSt = (e, key, mode, centerKey) => { e.preventDefault(); e.stopPropagation(); setInter({ type: 'move_guide', key, mode, centerKey }); };
+
+            const hdGlobalMv = (e) => {
+                if (!inter || inter.type !== 'move_guide') return; e.preventDefault(); e.stopPropagation();
+                const cR = imgConRef.current.getBoundingClientRect(); const cX = e.touches ? e.touches[0].clientX : e.clientX; const cY = e.touches ? e.touches[0].clientY : e.clientY;
+                if (inter.key.startsWith('bangs')) setFaceTweakParams(prev => prev.bangsWidth !== '自訂' ? { ...prev, bangsWidth: '自訂' } : prev);
+                const dx = (cX - cR.left) / cR.width * 100; const dy = (cY - cR.top) / cR.height * 100; const baseG = defaultFaceGuides;
+                let minVal = baseG[inter.key] - 2.5; let maxVal = baseG[inter.key] + 2.5;
+                if (inter.key === 'hairlineY') { minVal = baseG[inter.key] - 3; maxVal = baseG[inter.key] + 3; }
+                else if (inter.key === 'frontHairLengthY') { minVal = baseG[inter.key] - 10; maxVal = baseG[inter.key] + 50; }
+                else if (['frontHairRootY', 'frontHairRootDx', 'frontHairDx', 'bangsRootY', 'bangsLengthY'].includes(inter.key)) { minVal = baseG[inter.key] - 10; maxVal = baseG[inter.key] + 10; }
+                else if (['bangsRootDx', 'bangsDx'].includes(inter.key)) { minVal = baseG[inter.key] - 5; maxVal = baseG[inter.key] + 5; }
+
+                if (inter.mode === 'y') setFaceGuides(p => ({ ...p, [inter.key]: Math.max(minVal, Math.min(maxVal, dy)) }));
+                else if (inter.mode === 'x') setFaceGuides(p => ({ ...p, [inter.key]: Math.max(minVal, Math.min(maxVal, dx)) }));
+                else if (inter.mode === 'symY') setFaceGuides(p => ({ ...p, [inter.key]: Math.max(minVal, Math.min(maxVal, Math.abs(faceGuides[inter.centerKey] - dy))) }));
+                else if (inter.mode === 'symX') setFaceGuides(p => ({ ...p, [inter.key]: Math.max(minVal, Math.min(maxVal, Math.abs(faceGuides.centerX - dx))) }));
+                else if (inter.mode === 'symEyeX') setFaceGuides(p => ({ ...p, [inter.key]: Math.max(minVal, Math.min(maxVal, Math.min(Math.abs((faceGuides.centerX - faceGuides.eyeCenterDx) - dx), Math.abs((faceGuides.centerX + faceGuides.eyeCenterDx) - dx)))) }));
+            };
+
+            const guidesToBoxes = (g) => ({
+                nose: { x: g.centerX - g.noseDx, y: g.eyeY + g.eyeDy, w: g.noseDx * 2, h: g.noseY - (g.eyeY + g.eyeDy) },
+                mouth: { x: g.centerX - g.mouthDx - 2, y: Math.min(g.mouthY - g.mouthUpperDy, g.mouthY + g.mouthCornerDy) - 2, w: g.mouthDx * 2 + 4, h: g.mouthUpperDy + g.mouthLowerDy + Math.abs(g.mouthCornerDy) + 4 },
+                leftEye: { x: g.centerX - g.eyeCenterDx - g.eyeDx - 2, y: Math.min(g.eyebrowY - 5, g.eyeY - g.eyeDy, g.eyeY + g.eyeOuterDy) - 2, w: g.eyeDx * 2 + 4, h: Math.max(g.eyeY + g.eyeDy, g.eyeY + g.eyeOuterDy) - Math.min(g.eyebrowY - 5, g.eyeY - g.eyeDy, g.eyeY + g.eyeOuterDy) + 4 },
+                rightEye: { x: g.centerX + g.eyeCenterDx - g.eyeDx - 2, y: Math.min(g.eyebrowY - 5, g.eyeY - g.eyeDy, g.eyeY + g.eyeOuterDy) - 2, w: g.eyeDx * 2 + 4, h: Math.max(g.eyeY + g.eyeDy, g.eyeY + g.eyeOuterDy) - Math.min(g.eyebrowY - 5, g.eyeY - g.eyeDy, g.eyeY + g.eyeOuterDy) + 4 },
+                leftEyebrow: { x: g.centerX - g.eyebrowOuterDx - 2, y: g.eyebrowY - 5, w: g.eyebrowOuterDx - g.eyebrowInnerDx + 4, h: 10 },
+                rightEyebrow: { x: g.centerX + g.eyebrowInnerDx - 2, y: g.eyebrowY - 5, w: g.eyebrowOuterDx - g.eyebrowInnerDx + 4, h: 10 }
+            });
+
+            const hdGenFace = async () => {
+                setIsUploading(true); setError(null);
+                try {
+                    let targetImage = uploadedImage;
+                    const t = faceTweakParams; let promptParams = [];
+                    const translate = (val, category) => {
+                        if (category === 'irisSize') { if (val === '無') return 'no irises'; if (val === '大') return 'large irises'; if (val === '中') return 'medium irises'; if (val === '小') return 'small irises'; }
+                        if (category === 'hairTie') { if (val === '低') return 'low tied'; if (val === '中') return 'medium tied'; if (val === '高') return 'high tied'; }
+                        const dict = {
+                            '似顏繪': 'highly detailed anime style portrait, realistic human facial proportions but beautiful anime aesthetic, 2.5D, vtuber style', 
+                            '日系動漫': 'authentic Japanese anime studio animation style, highly stylized anime features', '韓系動漫': 'korean webtoon style, highly stylized manhwa features', '美系動漫': 'western comic book style, american animation', '真實系': 'Final Fantasy VII Remake style, high-end 3D CG',
+                            '女': 'female', '男': 'male', '中性': 'androgynous', '黃種人': 'Asian', '白種人': 'Caucasian', '棕種人': 'Latino or South Asian', '黑種人': 'Black person',
+                            '長髮': 'long hair', '短髮': 'short hair', '光頭': 'bald', '馬尾': 'ponytail', '雙馬尾': 'twintails', '波浪': 'wavy hair', '短捲髮': 'short curly hair', '浪漫捲': 'romantic loose curls', '羊毛捲': 'fleece curls', '螺旋捲': 'ringlets', '公主頭': 'half up half down hair', '辮子頭': 'braided hair', '包頭': 'bun hair', '雙包頭': 'double buns', '髒辮': 'dreadlocks', '髒辮馬尾': 'dreadlocks ponytail', '雷鬼頭': 'locs',
+                            '無': 'slicked back hair, NO sidelocks', '中長髮': 'medium-length hair', '捲髮': 'curly hair', '公主切': 'hime cut', '羽毛剪': 'feathered cut',
+                            '中分': 'center parted', '左旁分': 'left side parted', '右旁分': 'right side parted', '左八二分': '80/20 left side parted', '右八二分': '80/20 right side parted', '全左': 'swept entirely to the left', '全右': 'swept entirely to the right',
+                            '無瀏海': 'no bangs', '齊瀏海': 'blunt bangs strictly on forehead', '碎瀏海': 'choppy textured bangs strictly on forehead', '空氣瀏海': 'wispy bangs strictly on forehead', '法式瀏海': 'french bangs', '八字瀏海': 'curtain bangs',
+                            '普通': 'normal', '簡單': 'simple flat', '精緻': 'highly detailed intricate', '圓形': 'round', '蛇瞳': 'vertical slit snake', '蛙瞳': 'horizontal frog', '羊瞳': 'rectangular goat', '星形': 'star-shaped', '心形': 'heart-shaped', '圓型': 'round', '橢圓': 'oval iris', '細橢圓': 'thin vertical oval iris',
+                            '強': 'strong bright', '中': 'medium', '弱': 'weak', '無光': 'matte lifeless',
+                            '小巧鼻': 'small nose', '高挺鼻': 'tall prominent nose', '圓鼻頭': 'round button nose', '鷹鉤鼻': 'hooked nose',
+                            '櫻桃小嘴': 'small mouth', '薄唇': 'thin lips', '厚唇': 'thick plump lips', '寬嘴': 'wide mouth', '貓咪唇': 'cat-like smile mouth',
+                            '一般': 'normal human ears', '貓耳': 'cat ears', '精靈耳': 'elf ears', '狐狸耳': 'fox ears', '垂耳狗': 'floppy dog ears', '魚鰭耳': 'aquatic fin ears', '兔耳': 'bunny ears',
+                            '白皙': 'fair', '極白皙': 'very pale', '自然': 'natural', '小麥色': 'tan', '古銅色': 'bronze', '深色': 'dark',
+                            '標準': 'standard face', '瓜子臉': 'oval v-shaped face', '圓臉': 'round face', '方臉': 'square face', '長臉': 'long face', '心形臉': 'heart-shaped face', '包子臉': 'chubby round face', '日系標準': 'classic anime face proportions', '幼女/蘿莉': 'loli face, round chubby cheeks', '御姐/成熟': 'mature anime woman face', '韓系標準': 'korean webtoon face proportions', '韓系漫改女': 'webtoon female lead face', '韓系漫改男': 'webtoon male lead face',
+                            '鬼角': 'oni horns', '惡魔角': 'demon horns', '綿羊角': 'curled sheep horns', '鹿角': 'deer antlers', '鼻環': 'nose ring', '唇環': 'lip ring', '耳環': 'earrings', '面具': 'wearing a mask', '眼罩': 'wearing an eyepatch', '眼鏡': 'wearing glasses',
+                            ...customPrompts
+                        };
+                        return dict[val] || val;
+                    };
+
+                    promptParams.push(`Art Style: ${translate(t.artStyle)}`); promptParams.push(`Gender: ${translate(t.gender)}`);
+                    if (t.race && t.race !== '無') promptParams.push(`Race/Ethnicity: ${translate(t.race)}`);
+                    if (t.hairStyle === '光頭') { promptParams.push(`Hairstyle: ${translate(t.hairStyle)}`); } else {
+                        if(t.hairStyle !== '無') { let backStr = translate(t.hairStyle); if(t.hairTie !== '無') backStr = translate(t.hairTie, 'hairTie') + ' ' + backStr; promptParams.push(`Back Hair: ${backStr}`); }
+                        let frontStr = translate(t.frontHair, 'frontHair'); if (t.frontHair !== '無' && t.frontHairParting && t.frontHairParting !== '無') frontStr = translate(t.frontHairParting) + ' ' + frontStr; promptParams.push(`Front Hair: ${frontStr}`);
+                        if(t.bangs !== '無瀏海') { let bangStr = translate(t.bangs, 'bangs'); if (t.bangsParting && t.bangsParting !== '無') bangStr = translate(t.bangsParting) + ' ' + bangStr; promptParams.push(`Bangs: ${bangStr}`); } else { promptParams.push(`Bangs: STRICTLY NO BANGS`); }
+                        if(t.highlights) promptParams.push(`Hair has ${translate(t.hairColor)} highlights`); else promptParams.push(`Hair color: ${translate(t.hairColor)}`);
+                    }
+                    promptParams.push(`Eyebrows: ${translate(t.eyebrows)}`); promptParams.push(`Eye shape: ${translate(t.eyes)}`); promptParams.push(`Iris color: ${translate(t.irisColor)}`); promptParams.push(`Iris detail level: ${translate(t.irisDetail)}`);
+                    if (t.irisSize !== '中') promptParams.push(`Iris size: ${translate(t.irisSize, 'irisSize')}`); if (['似顏繪', '日系動漫', '韓系動漫'].includes(t.artStyle) && t.irisShape) promptParams.push(`Iris shape: ${translate(t.irisShape)}`);
+                    if (t.pupilShape !== '圓型') promptParams.push(`Pupil shape: ${translate(t.pupilShape)} pupil`); promptParams.push(`Eye catchlight/sparkle: ${translate(t.eyeSparkle)}`); promptParams.push(`Nose: ${translate(t.nose)}`); promptParams.push(`Mouth/Lips: ${translate(t.mouth)}`); promptParams.push(`Ears: ${translate(t.ears)}`); promptParams.push(`Skin tone: ${translate(t.skinTone)} skin`);
+                    if(t.faceShape && t.faceShape !== '標準') promptParams.push(`Face shape: ${translate(t.faceShape)}`); if(t.feature !== '無') promptParams.push(`Add explicit feature: ${translate(t.feature)}`);
+                    if(t.deepEyeSockets) promptParams.push("Deep prominent eye sockets"); if(t.prominentPhiltrum) promptParams.push("Prominent deep philtrum"); if(t.freckles) promptParams.push("Freckles on face"); if(t.blush) promptParams.push("Blush on cheeks"); if(t.tearTroughs) promptParams.push("tear troughs"); if(t.aegyoSal) promptParams.push("aegyo sal"); if(t.nasolabialFolds) promptParams.push("nasolabial folds"); if(t.cleftChin) promptParams.push("cleft chin"); if(t.hairPartingLine) promptParams.push("prominent visible hair parting line");
+
+                    const baseG = defaultFaceGuides;
+                    if (faceGuides.headTopY < baseG.headTopY - 2) promptParams.push("high skull"); if (faceGuides.hairlineY > baseG.hairlineY + 2) promptParams.push("low hairline");
+                    if (t.frontHair !== '無') { if (faceGuides.frontHairDx > baseG.frontHairDx + 3) promptParams.push("wide front hair"); }
+                    if (t.bangs !== '無瀏海') { if (faceGuides.bangsLengthY > baseG.bangsLengthY + 4) promptParams.push("long bangs covering the eyes"); }
+                    if (faceGuides.chinBottomY > baseG.chinBottomY + 2) promptParams.push("long pointed chin"); if (faceGuides.jawLowerDx > baseG.jawLowerDx + 1) promptParams.push("strong square jawline");
+
+                    if (!uploadedImage) {
+                        const modelDataUrl = drawFaceBlueprint(faceGuides, faceTweakParams); const { mimeType, data } = window.processDataUrl(modelDataUrl);
+                        let geomInstruction = `CRITICAL GEOMETRY INSTRUCTION: You MUST lock the exact placement of jawline, cheeks, chin, ears, eyes, eyebrows, nose, mouth, FRONT HAIR, BANGS AND THE HAIRLINE exactly 1:1 to this blueprint. `;
+                        if (t.artStyle === '日系動漫' || t.artStyle === '韓系動漫' || t.artStyle === '美系動漫') geomInstruction += `Use HIGHLY STYLIZED AND EXAGGERATED facial features. `; else geomInstruction += `Use HIGHLY DETAILED features. `;
+                        const negConstraints = ["thick lines", "bold outlines", "heavy lineart", "deformed jawline", "ignoring blueprint shape"];
+                        if (t.bangs === '無瀏海') negConstraints.push("bangs", "hair covering the forehead"); if (t.frontHair === '無') negConstraints.push("sidelocks", "side framing hair");
+                        const negString = `\nCRITICAL NEGATIVE PROMPT: ${negConstraints.join(', ')}.`;
+                        
+                        let finalImageUrl;
+                        if (t.artStyle === '真實系') {
+                            const realisticPrompt = `Transform blueprint to high-end 3D CG. ${geomInstruction} Pure white background. Details: ${promptParams.join(', ')}.${negString}`;
+                            finalImageUrl = await window.generateImageWithRetry({ contents: [{ parts: [{ text: realisticPrompt }, { inlineData: { mimeType, data } }] }], generationConfig: { responseModalities: ['TEXT', 'IMAGE'] } });
+                        } else {
+                            const colorPrompt = `Transform blueprint to a fully rendered illustration in ${translate(t.artStyle)}. ${geomInstruction} Pure white background. Details: ${promptParams.join(', ')}.${negString}`;
+                            finalImageUrl = await window.generateImageWithRetry({ contents: [{ parts: [{ text: colorPrompt }, { inlineData: { mimeType, data } }] }], generationConfig: { responseModalities: ['TEXT', 'IMAGE'] } });
+                        }
+                        const finalResized = await window.resizeImage(finalImageUrl, 2048, 2048);
+                        setImageHistory([{ url: finalResized, properties: null }]); setHistoryIndex(0);
+                        setInitialFaceGuides({...faceGuides});
+                    } else {
+                        let hasGeometricChanges = false;
+                        for (const k of ['eyeY','eyeCenterDx','eyeDy','eyeDx','eyeOuterDy','noseY','noseDx','mouthY','mouthUpperDy','mouthLowerDy','mouthDx','mouthCornerDy','eyebrowY','eyebrowInnerDx','eyebrowOuterDx','cheekboneDx','jawUpperDx','jawUpperY','jawLowerDx','jawLowerY','chinY','chinDx']) {
+                            if (faceGuides[k] !== initialFaceGuides[k]) { hasGeometricChanges = true; break; }
+                        }
+                        if (hasGeometricChanges) targetImage = await window.generateFaceComposite(uploadedImage, guidesToBoxes(initialFaceGuides), guidesToBoxes(faceGuides), initialFaceGuides);
+                        
+                        const { mimeType, data } = window.processDataUrl(targetImage);
+                        let geomInstruction = hasGeometricChanges ? "CRITICAL GEOMETRY LOCK: Trace over the input image EXACTLY. Lock placement 1:1. " : "Keep internal facial geometry intact. ";
+                        if (t.faceShape !== '標準') geomInstruction += `Modify outer face contour to a STRICT ${translate(t.faceShape)}. `; else if (hasGeometricChanges) geomInstruction += "Keep jawline exactly as in the input image. ";
+                        
+                        const negConstraints = ["thick lines", "bold outlines", "heavy lineart", "deformed jawline"];
+                        if (t.bangs === '無瀏海') negConstraints.push("bangs"); if (t.frontHair === '無') negConstraints.push("sidelocks");
+                        const negString = `\nCRITICAL NEGATIVE PROMPT: ${negConstraints.join(', ')}.`;
+
+                        let finalImageUrl;
+                        if (t.artStyle === '真實系') {
+                            finalImageUrl = await window.generateImageWithRetry({ contents: [{ parts: [{ text: `Transform image to high-end 3D CG. ${geomInstruction} Apply: ${promptParams.join(', ')}.${negString}` }, { inlineData: { mimeType, data } }] }], generationConfig: { responseModalities: ['TEXT', 'IMAGE'] } });
+                        } else {
+                            const sketchUrl = await window.generateImageWithRetry({ contents: [{ parts: [{ text: `Re-draw as B&W line art sketch. ${geomInstruction} Apply: ${promptParams.join(', ')}.${negString}` }, { inlineData: { mimeType, data } }] }], generationConfig: { responseModalities: ['TEXT', 'IMAGE'] } });
+                            const { mimeType: sM, data: sD } = window.processDataUrl(sketchUrl);
+                            finalImageUrl = await window.generateImageWithRetry({ contents: [{ parts: [{ text: `Color Line Art based on Photo in ${translate(t.artStyle)}. Apply: ${promptParams.join(', ')}.${negString}` }, { inlineData: { mimeType: sM, data: sD } }, { inlineData: { mimeType, data } }] }], generationConfig: { responseModalities: ['TEXT', 'IMAGE'] } });
+                        }
+                        const finalResized = await window.resizeImage(finalImageUrl, 2048, 2048);
+                        setImageHistory(p => [...p.slice(0, historyIndex + 1), { url: finalResized, properties: null }]); setHistoryIndex(p => p + 1);
+                        setInitialFaceGuides({...faceGuides});
+                    }
+                } catch (e) { setError("作業失敗：" + e.message); } finally { setIsUploading(false); }
+            };
+
+            const g = faceGuides;
+
+            return (
+                <div className="min-h-screen flex flex-col font-sans relative pb-10">
+                    <header className="text-center py-6 bg-gray-900 border-b border-gray-800 flex justify-between items-center px-6">
+                        <h1 className="text-2xl sm:text-3xl font-bold text-green-400 tracking-wider">
+                            FaceCraft <span className="text-gray-400 text-sm font-normal align-middle ml-2">捏臉模組</span>
+                        </h1>
+                        <button onClick={exportResult} disabled={!uploadedImage || isUploading} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg font-bold shadow-lg transition-colors">
+                            <IconExport /> <span className="hidden sm:inline">{isEmbedded ? '匯出至主程式' : '下載圖片'}</span>
+                        </button>
+                    </header>
+
+                    {error && <div className="bg-red-900/80 text-red-200 p-3 text-center text-sm border-b border-red-700">{error} <button onClick={()=>setError(null)} className="ml-4 underline">關閉</button></div>}
+
+                    <div className="flex-1 flex flex-col lg:flex-row p-4 gap-6 max-w-7xl mx-auto w-full mt-4">
+                        {/* Left Side: Canvas */}
+                        <div className="w-full lg:w-[45%] flex flex-col gap-4">
+                            <div className="relative w-full aspect-square border-4 border-gray-700 rounded-2xl bg-gray-800 overflow-hidden shadow-2xl group" ref={imgConRef} onMouseMove={hdGlobalMv} onMouseUp={()=>setInter(null)} onMouseLeave={()=>setInter(null)} onTouchMove={hdGlobalMv} onTouchEnd={()=>setInter(null)}>
+                                <div className="absolute inset-0 bg-checkerboard-pattern"></div>
+                                <div className="relative w-full h-full flex items-center justify-center">
+                                    {isUploading ? (
+                                        <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-green-500"></div>
+                                    ) : (
+                                        <React.Fragment>
+                                            {uploadedImage && <img src={uploadedImage} className="w-full h-full object-contain pointer-events-none" />}
+                                            
+                                            <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none p-4 drop-shadow-[0_0_4px_rgba(0,0,0,0.8)]">
+                                                <svg viewBox="0 0 100 100" className="w-full h-full text-white" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                                                    {!uploadedImage && (
+                                                        <g opacity="0.3">
+                                                            <line x1="50" y1="0" x2="50" y2="100" strokeWidth="0.2" strokeDasharray="2,2" />
+                                                            <line x1="0" y1="50" x2="100" y2="50" strokeWidth="0.2" strokeDasharray="2,2" />
+                                                            <circle cx="50" cy="50" r="45" strokeWidth="0.1" strokeDasharray="1,4" />
+                                                        </g>
+                                                    )}
+                                                    
+                                                    {/* Head Contour */}
+                                                    <path d={`M ${g.centerX} ${g.headTopY}
+                                                        C ${g.centerX + g.foreheadTopDx * 0.6} ${g.headTopY}, 
+                                                        ${g.centerX + g.foreheadTopDx} ${g.foreheadTopY}, 
+                                                        ${g.centerX + (g.foreheadTopDx + g.foreheadBottomDx) / 2} ${(g.foreheadTopY + g.foreheadBottomY) / 2}
+                                                        C ${g.centerX + g.foreheadBottomDx} ${g.foreheadBottomY},
+                                                        ${g.centerX + g.cheekboneDx} ${g.cheekboneY - g.cheekboneDy},
+                                                        ${g.centerX + g.cheekboneDx} ${g.cheekboneY}
+                                                        C ${g.centerX + g.jawUpperDx} ${g.jawUpperY},
+                                                        ${g.centerX + g.jawLowerDx} ${g.jawLowerY},
+                                                        ${g.centerX + g.chinDx} ${g.chinY}
+                                                        Q ${g.centerX} ${g.chinBottomY} ${g.centerX - g.chinDx} ${g.chinY}
+                                                        C ${g.centerX - g.jawLowerDx} ${g.jawLowerY},
+                                                        ${g.centerX - g.jawUpperDx} ${g.jawUpperY},
+                                                        ${g.centerX - g.cheekboneDx} ${g.cheekboneY}
+                                                        C ${g.centerX - g.cheekboneDx} ${g.cheekboneY - g.cheekboneDy},
+                                                        ${g.centerX - g.foreheadBottomDx} ${g.foreheadBottomY},
+                                                        ${g.centerX - (g.foreheadTopDx + g.foreheadBottomDx) / 2} ${(g.foreheadTopY + g.foreheadBottomY) / 2}
+                                                        C ${g.centerX - g.foreheadTopDx} ${g.foreheadTopY},
+                                                        ${g.centerX - g.foreheadTopDx * 0.6} ${g.headTopY},
+                                                        ${g.centerX} ${g.headTopY} Z`} strokeWidth="0.5" opacity={activeGuideGroup==='face_shape'?0.9:0.2} />
+
+                                                    {/* Ears */}
+                                                    <path d={`M ${g.centerX - 20.5} 48 C ${g.centerX - 26.5} 44 ${g.centerX - 25.5} 60.5 ${g.centerX - 19.5} 62.5`} strokeWidth="0.5" fill="none" opacity={activeGuideGroup==='face_shape'?0.9:0.2} />
+                                                    <path d={`M ${g.centerX + 20.5} 48 C ${g.centerX + 26.5} 44 ${g.centerX + 25.5} 60.5 ${g.centerX + 19.5} 62.5`} strokeWidth="0.5" fill="none" opacity={activeGuideGroup==='face_shape'?0.9:0.2} />
+
+                                                    {/* Hairline Guide */}
+                                                    {sGuide('hair', '髮際線') && <path d={`M ${g.centerX - g.foreheadTopDx * 0.85} ${g.hairlineY} Q ${g.centerX} ${g.hairlineY - 3} ${g.centerX + g.foreheadTopDx * 0.85} ${g.hairlineY}`} strokeWidth="0.8" opacity="0.9" stroke="#22c55e" />}
+
+                                                    {/* Front Hair Guide */}
+                                                    {sGuide('hair', '前髮') && (
+                                                        <React.Fragment>
+                                                            <path d={`M ${g.centerX - g.frontHairRootDx} ${g.frontHairRootY} Q ${g.centerX - Math.max(g.frontHairRootDx, g.frontHairDx) - 6} ${g.eyeY} ${g.centerX - g.frontHairDx + 2} ${g.frontHairLengthY}`} strokeWidth="0.8" opacity="0.9" stroke="#22c55e" />
+                                                            <path d={`M ${g.centerX + g.frontHairRootDx} ${g.frontHairRootY} Q ${g.centerX + Math.max(g.frontHairRootDx, g.frontHairDx) + 6} ${g.eyeY} ${g.centerX + g.frontHairDx - 2} ${g.frontHairLengthY}`} strokeWidth="0.8" opacity="0.9" stroke="#22c55e" />
+                                                        </React.Fragment>
+                                                    )}
+
+                                                    {/* Bangs Guide */}
+                                                    {sGuide('hair', '瀏海') && (
+                                                        <React.Fragment>
+                                                            <path d={`M ${g.centerX - g.bangsRootDx} ${g.bangsRootY} Q ${g.centerX} ${g.bangsRootY - 2} ${g.centerX + g.bangsRootDx} ${g.bangsRootY} Q ${g.centerX + Math.max(g.bangsRootDx, g.bangsDx) + 6} ${(g.bangsRootY + g.bangsLengthY)/2} ${g.centerX + g.bangsDx} ${g.bangsLengthY} Q ${g.centerX} ${g.bangsLengthY + 1} ${g.centerX - g.bangsDx} ${g.bangsLengthY} Q ${g.centerX - Math.max(g.bangsRootDx, g.bangsDx) - 6} ${(g.bangsRootY + g.bangsLengthY)/2} ${g.centerX - g.bangsRootDx} ${g.bangsRootY}`} strokeWidth="0.8" opacity="0.9" fill="#22c55e" fillOpacity="0.1" stroke="#22c55e" />
+                                                        </React.Fragment>
+                                                    )}
+
+                                                    {/* Neck & Collarbone */}
+                                                    <g opacity={activeGuideGroup==='face_shape'?0.8:0.2}>
+                                                        <path d={`M ${g.centerX - 8.8} ${g.jawLowerY + (g.chinY - g.jawLowerY) * 0.75} L ${g.centerX - 8.8} 88 Q ${g.centerX - 14.5} 95 ${g.centerX - 37.5} 100`} strokeWidth="0.5" />
+                                                        <path d={`M ${g.centerX + 8.8} ${g.jawLowerY + (g.chinY - g.jawLowerY) * 0.75} L ${g.centerX + 8.8} 88 Q ${g.centerX + 14.5} 95 ${g.centerX + 37.5} 100`} strokeWidth="0.5" />
+                                                        <path d={`M ${g.centerX - 20.3} 96 Q ${g.centerX - 5.75} 98 ${g.centerX} 95 Q ${g.centerX + 5.75} 98 ${g.centerX + 20.3} 96`} strokeWidth="0.3" />
+                                                    </g>
+
+                                                    {/* Facial Features */}
+                                                    <g opacity={activeGuideGroup==='facial_features'?0.9:0.2}>
+                                                        {/* Eyes */}
+                                                        <path d={`M ${g.centerX - g.eyeCenterDx - g.eyeDx} ${g.eyeY} Q ${g.centerX - g.eyeCenterDx} ${g.eyeY - g.eyeDy*1.5} ${g.centerX - g.eyeCenterDx + g.eyeDx} ${g.eyeY}`} strokeWidth="0.8" />
+                                                        <path d={`M ${g.centerX - g.eyeCenterDx - g.eyeDx + 1} ${g.eyeY + g.eyeDy*0.5} Q ${g.centerX - g.eyeCenterDx} ${g.eyeY + g.eyeDy} ${g.centerX - g.eyeCenterDx + g.eyeDx - 1} ${g.eyeY + g.eyeDy*0.5}`} strokeWidth="0.4" />
+                                                        <circle cx={g.centerX - g.eyeCenterDx} cy={g.eyeY} r={Math.max(0.5, g.eyeDy * 0.3)} fill="currentColor" opacity="0.8" />
+                                                        <path d={`M ${g.centerX + g.eyeCenterDx - g.eyeDx} ${g.eyeY} Q ${g.centerX + g.eyeCenterDx} ${g.eyeY - g.eyeDy*1.5} ${g.centerX + g.eyeCenterDx + g.eyeDx} ${g.eyeY}`} strokeWidth="0.8" />
+                                                        <path d={`M ${g.centerX + g.eyeCenterDx - g.eyeDx + 1} ${g.eyeY + g.eyeDy*0.5} Q ${g.centerX + g.eyeCenterDx} ${g.eyeY + g.eyeDy} ${g.centerX + g.eyeCenterDx + g.eyeDx - 1} ${g.eyeY + g.eyeDy*0.5}`} strokeWidth="0.4" />
+                                                        <circle cx={g.centerX + g.eyeCenterDx} cy={g.eyeY} r={Math.max(0.5, g.eyeDy * 0.3)} fill="currentColor" opacity="0.8" />
+                                                        
+                                                        {/* Eyebrows */}
+                                                        <path d={`M ${g.centerX - g.eyebrowOuterDx} ${g.eyebrowY} Q ${g.centerX - (g.eyebrowOuterDx+g.eyebrowInnerDx)/2} ${g.eyebrowY - 2} ${g.centerX - g.eyebrowInnerDx} ${g.eyebrowY}`} strokeWidth="0.6" />
+                                                        <path d={`M ${g.centerX + g.eyebrowInnerDx} ${g.eyebrowY} Q ${g.centerX + (g.eyebrowOuterDx+g.eyebrowInnerDx)/2} ${g.eyebrowY - 2} ${g.centerX + g.eyebrowOuterDx} ${g.eyebrowY}`} strokeWidth="0.6" />
+                                                        
+                                                        {/* Nose */}
+                                                        <path d={`M ${g.centerX - 1} ${g.noseY} Q ${g.centerX} ${g.noseY + 2} ${g.centerX + 1} ${g.noseY}`} strokeWidth="0.5" />
+                                                        
+                                                        {/* Mouth */}
+                                                        <path d={`M ${g.centerX - g.mouthDx} ${g.mouthY + g.mouthCornerDy} Q ${g.centerX} ${g.mouthY - g.mouthUpperDy} ${g.centerX + g.mouthDx} ${g.mouthY + g.mouthCornerDy}`} strokeWidth="0.5" />
+                                                        <path d={`M ${g.centerX - g.mouthDx + 2} ${g.mouthY + g.mouthCornerDy + 1} Q ${g.centerX} ${g.mouthY + g.mouthLowerDy} ${g.centerX + g.mouthDx - 2} ${g.mouthY + g.mouthCornerDy + 1}`} strokeWidth="0.5" opacity="0.6" />
+                                                    </g>
+                                                </svg>
+                                            </div>
+
+                                            {/* Draggable Lines Overlay */}
+                                            <div className="absolute inset-0 z-30 touch-none overflow-hidden">
+                                                <LineV x={g.centerX} onDrag={e=>hdGuideSt(e,'centerX','c')} color="bg-red-500" visible={!!currentActiveSubGrp} />
+                                                <LineH y={g.headTopY} onDrag={e=>hdGuideSt(e,'headTopY','y')} visible={sGuide('face_shape', '頭部')} />
+                                                
+                                                <LineH y={g.hairlineY} onDrag={e=>hdGuideSt(e,'hairlineY','y')} visible={sGuide('hair', '髮際線')} />
+                                                <LineH y={g.frontHairRootY} onDrag={e=>hdGuideSt(e,'frontHairRootY','y')} visible={sGuide('hair', '前髮')} />
+                                                <LineV x={g.centerX - g.frontHairRootDx} onDrag={e=>hdGuideSt(e,'frontHairRootDx','symX')} visible={sGuide('hair', '前髮')} align="top" />
+                                                <LineV x={g.centerX + g.frontHairRootDx} onDrag={e=>hdGuideSt(e,'frontHairRootDx','symX')} visible={sGuide('hair', '前髮')} align="top" />
+                                                <LineH y={g.frontHairLengthY} onDrag={e=>hdGuideSt(e,'frontHairLengthY','y')} visible={sGuide('hair', '前髮')} />
+                                                <LineV x={g.centerX - g.frontHairDx} onDrag={e=>hdGuideSt(e,'frontHairDx','symX')} visible={sGuide('hair', '前髮')} align="bottom" />
+                                                <LineV x={g.centerX + g.frontHairDx} onDrag={e=>hdGuideSt(e,'frontHairDx','symX')} visible={sGuide('hair', '前髮')} align="bottom" />
+
+                                                <LineH y={g.bangsRootY} onDrag={e=>hdGuideSt(e,'bangsRootY','y')} color="bg-cyan-400" visible={sGuide('hair', '瀏海')} />
+                                                <LineV x={g.centerX - g.bangsRootDx} onDrag={e=>hdGuideSt(e,'bangsRootDx','symX')} color="bg-cyan-400" visible={sGuide('hair', '瀏海')} align="top" />
+                                                <LineV x={g.centerX + g.bangsRootDx} onDrag={e=>hdGuideSt(e,'bangsRootDx','symX')} color="bg-cyan-400" visible={sGuide('hair', '瀏海')} align="top" />
+                                                <LineH y={g.bangsLengthY} onDrag={e=>hdGuideSt(e,'bangsLengthY','y')} color="bg-cyan-400" visible={sGuide('hair', '瀏海')} />
+                                                <LineV x={g.centerX - g.bangsDx} onDrag={e=>hdGuideSt(e,'bangsDx','symX')} color="bg-cyan-400" visible={sGuide('hair', '瀏海')} align="bottom" />
+                                                <LineV x={g.centerX + g.bangsDx} onDrag={e=>hdGuideSt(e,'bangsDx','symX')} color="bg-cyan-400" visible={sGuide('hair', '瀏海')} align="bottom" />
+
+                                                <LineH y={g.foreheadTopY} onDrag={e=>hdGuideSt(e,'foreheadTopY','y')} visible={sGuide('face_shape', '額頭')} />
+                                                <LineH y={g.foreheadBottomY} onDrag={e=>hdGuideSt(e,'foreheadBottomY','y')} visible={sGuide('face_shape', '額頭')} />
+                                                <LineV x={g.centerX - g.foreheadTopDx} onDrag={e=>hdGuideSt(e,'foreheadTopDx','symX')} color="bg-red-500" visible={sGuide('face_shape', '額頭')} align="bottom" />
+                                                <LineV x={g.centerX + g.foreheadTopDx} onDrag={e=>hdGuideSt(e,'foreheadTopDx','symX')} color="bg-red-500" visible={sGuide('face_shape', '額頭')} align="bottom" />
+                                                <LineV x={g.centerX - g.foreheadBottomDx} onDrag={e=>hdGuideSt(e,'foreheadBottomDx','symX')} color="bg-red-500" visible={sGuide('face_shape', '額頭')} align="bottom" />
+                                                <LineV x={g.centerX + g.foreheadBottomDx} onDrag={e=>hdGuideSt(e,'foreheadBottomDx','symX')} color="bg-red-500" visible={sGuide('face_shape', '額頭')} align="bottom" />
+
+                                                <LineH y={g.eyeY} onDrag={e=>hdGuideSt(e,'eyeY','y')} color="bg-red-500" visible={sGuide('facial_features', '眼睛')} />
+                                                <LineV x={g.centerX - g.eyeCenterDx} onDrag={e=>hdGuideSt(e,'eyeCenterDx','symX')} color="bg-red-500" visible={sGuide('facial_features', '眼睛')} align="bottom" />
+                                                <LineV x={g.centerX + g.eyeCenterDx} onDrag={e=>hdGuideSt(e,'eyeCenterDx','symX')} color="bg-red-500" visible={sGuide('facial_features', '眼睛')} align="bottom" />
+                                                <LineH y={g.eyeY - g.eyeDy} onDrag={e=>hdGuideSt(e,'eyeDy','symY','eyeY')} visible={sGuide('facial_features', '眼睛')} />
+                                                <LineH y={g.eyeY + g.eyeDy} onDrag={e=>hdGuideSt(e,'eyeDy','symY','eyeY')} visible={sGuide('facial_features', '眼睛')} />
+                                                <LineV x={g.centerX - g.eyeCenterDx - g.eyeDx} onDrag={e=>hdGuideSt(e,'eyeDx','symEyeX')} visible={sGuide('facial_features', '眼睛')} />
+                                                <LineV x={g.centerX - g.eyeCenterDx + g.eyeDx} onDrag={e=>hdGuideSt(e,'eyeDx','symEyeX')} visible={sGuide('facial_features', '眼睛')} />
+                                                <LineV x={g.centerX + g.eyeCenterDx - g.eyeDx} onDrag={e=>hdGuideSt(e,'eyeDx','symEyeX')} visible={sGuide('facial_features', '眼睛')} />
+                                                <LineV x={g.centerX + g.eyeCenterDx + g.eyeDx} onDrag={e=>hdGuideSt(e,'eyeDx','symEyeX')} visible={sGuide('facial_features', '眼睛')} />
+                                                
+                                                {sGuide('facial_features', '眉毛') && (
+                                                    <React.Fragment>
+                                                        <LineH y={g.eyebrowY} onDrag={e=>hdGuideSt(e,'eyebrowY','y')} visible={true} />
+                                                        <LineV x={g.centerX - g.eyebrowInnerDx} onDrag={e=>hdGuideSt(e,'eyebrowInnerDx','symX')} visible={true} align="bottom" />
+                                                        <LineV x={g.centerX + g.eyebrowInnerDx} onDrag={e=>hdGuideSt(e,'eyebrowInnerDx','symX')} visible={true} align="bottom" />
+                                                        <LineV x={g.centerX - g.eyebrowOuterDx} onDrag={e=>hdGuideSt(e,'eyebrowOuterDx','symX')} visible={true} />
+                                                        <LineV x={g.centerX + g.eyebrowOuterDx} onDrag={e=>hdGuideSt(e,'eyebrowOuterDx','symX')} visible={true} />
+                                                    </React.Fragment>
+                                                )}
+
+                                                <LineH y={g.noseY} onDrag={e=>hdGuideSt(e,'noseY','y')} visible={sGuide('facial_features', '鼻子')} />
+                                                <LineV x={g.centerX - g.noseDx} onDrag={e=>hdGuideSt(e,'noseDx','symX')} visible={sGuide('facial_features', '鼻子')} />
+                                                <LineV x={g.centerX + g.noseDx} onDrag={e=>hdGuideSt(e,'noseDx','symX')} visible={sGuide('facial_features', '鼻子')} />
+
+                                                <LineH y={g.mouthY} onDrag={e=>hdGuideSt(e,'mouthY','y')} color="bg-red-500" visible={sGuide('facial_features', '嘴巴')} />
+                                                <LineH y={g.mouthY - g.mouthUpperDy} onDrag={e=>hdGuideSt(e,'mouthUpperDy','symY','mouthY')} visible={sGuide('facial_features', '嘴巴')} />
+                                                <LineH y={g.mouthY + g.mouthLowerDy} onDrag={e=>hdGuideSt(e,'mouthLowerDy','symY','mouthY')} visible={sGuide('facial_features', '嘴巴')} />
+                                                <LineV x={g.centerX - g.mouthDx} onDrag={e=>hdGuideSt(e,'mouthDx','symX')} visible={sGuide('facial_features', '嘴巴')} align="bottom" />
+                                                <LineV x={g.centerX + g.mouthDx} onDrag={e=>hdGuideSt(e,'mouthDx','symX')} visible={sGuide('facial_features', '嘴巴')} align="bottom" />
+
+                                                <LineH y={g.cheekboneY} onDrag={e=>hdGuideSt(e,'cheekboneY','y')} color="bg-red-500" visible={sGuide('face_shape', '顴骨')} />
+                                                <LineH y={g.cheekboneY - g.cheekboneDy} onDrag={e=>hdGuideSt(e,'cheekboneDy','symY','cheekboneY')} visible={sGuide('face_shape', '顴骨')} />
+                                                <LineH y={g.cheekboneY + g.cheekboneDy} onDrag={e=>hdGuideSt(e,'cheekboneDy','symY','cheekboneY')} visible={sGuide('face_shape', '顴骨')} />
+                                                <LineV x={g.centerX - g.cheekboneDx} onDrag={e=>hdGuideSt(e,'cheekboneDx','symX')} color="bg-red-500" visible={sGuide('face_shape', '顴骨')} align="bottom" />
+                                                <LineV x={g.centerX + g.cheekboneDx} onDrag={e=>hdGuideSt(e,'cheekboneDx','symX')} color="bg-red-500" visible={sGuide('face_shape', '顴骨')} align="bottom" />
+                                                
+                                                <LineH y={g.jawUpperY} onDrag={e=>hdGuideSt(e,'jawUpperY','y')} visible={sGuide('face_shape', '下顎')} />
+                                                <LineV x={g.centerX + g.jawUpperDx} onDrag={e=>hdGuideSt(e,'jawUpperDx','symX')} visible={sGuide('face_shape', '下顎')} align="bottom" />
+                                                
+                                                <LineH y={g.jawLowerY} onDrag={e=>hdGuideSt(e,'jawLowerY','y')} color="bg-cyan-400" visible={sGuide('face_shape', '下顎')} />
+                                                <LineV x={g.centerX - g.jawLowerDx} onDrag={e=>hdGuideSt(e,'jawLowerDx','symX')} color="bg-cyan-400" visible={sGuide('face_shape', '下顎')} align="bottom" />
+                                                
+                                                <LineH y={g.chinY} onDrag={e=>hdGuideSt(e,'chinY','y')} visible={sGuide('face_shape', '下巴')} />
+                                                <LineH y={g.chinBottomY} onDrag={e=>hdGuideSt(e,'chinBottomY','y')} visible={sGuide('face_shape', '下巴')} />
+                                                <LineV x={g.centerX - g.chinDx} onDrag={e=>hdGuideSt(e,'chinDx','symX')} visible={sGuide('face_shape', '下巴')} align="bottom" />
+                                                <LineV x={g.centerX + g.chinDx} onDrag={e=>hdGuideSt(e,'chinDx','symX')} visible={sGuide('face_shape', '下巴')} align="bottom" />
+                                            </div>
+                                        </React.Fragment>
+                                    )}
+                                </div>
+                                {uploadedImage && !isUploading && (
+                                    <div className="absolute bottom-3 right-3 z-50 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button onClick={()=>historyIndex>0 && setHistoryIndex(historyIndex-1)} disabled={historyIndex<=0} className="p-2 rounded-full bg-black/60 text-white hover:bg-black/80 backdrop-blur-sm disabled:opacity-50"><IconUndo /></button>
+                                        <button onClick={()=>historyIndex<imageHistory.length-1 && setHistoryIndex(historyIndex+1)} disabled={historyIndex>=imageHistory.length-1} className="p-2 rounded-full bg-black/60 text-white hover:bg-black/80 backdrop-blur-sm disabled:opacity-50"><IconRedo /></button>
+                                    </div>
+                                )}
+                            </div>
+
+                            <button onClick={hdGenFace} disabled={isUploading} className="w-full py-4 mt-2 rounded-2xl text-xl font-bold shadow-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed bg-green-600 text-white hover:bg-green-500 border-2 border-green-500">
+                                {isUploading ? '處理中...' : (!uploadedImage ? '生成初始角色' : '套用修改並生成')}
+                            </button>
+                        </div>
+
+                        {/* Right Side: Controls */}
+                        <div className="w-full lg:w-[55%] flex flex-col bg-gray-900 rounded-2xl border border-gray-800 p-4 sm:p-6 h-[80vh] lg:h-auto overflow-y-auto custom-scrollbar">
+                            <div className="flex justify-between items-center mb-4">
+                                <div className="flex bg-gray-800 p-1 rounded-xl">
+                                    {[{id:'face_shape', label:'臉型'}, {id:'facial_features', label:'五官'}, {id:'hair', label:'髮型'}].map(grp => (
+                                        <button key={grp.id} onClick={() => { setActiveGuideGroup(grp.id); setActiveSubGroup(null); }} className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${activeGuideGroup === grp.id ? 'bg-green-600 text-white' : 'text-gray-400 hover:text-white'}`}>
+                                            {grp.label}
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="flex gap-2">
+                                    <input type="file" ref={jsonFileRef} onChange={handleJsonUpload} accept=".json" className="hidden" />
+                                    <button onClick={() => jsonFileRef.current?.click()} className="px-3 py-2 bg-purple-600/80 text-white hover:bg-purple-500 rounded-lg text-xs font-bold transition-colors">載入 JSON</button>
+                                    <input type="file" ref={tweakFileRef} onChange={handleTweakUpload} accept="image/png, image/jpeg" className="hidden" />
+                                    <button onClick={() => tweakFileRef.current?.click()} className="px-3 py-2 bg-blue-600/80 text-white hover:bg-blue-500 rounded-lg text-xs font-bold transition-colors">上傳照片</button>
+                                    <button onClick={() => { setFaceGuides(defaultFaceGuides); setFaceTweakParams(initialTweakParams); setImageHistory([]); setHistoryIndex(-1); setInitialFaceGuides(defaultFaceGuides); }} className="px-3 py-2 bg-red-700/80 text-white hover:bg-red-600 rounded-lg text-xs font-bold transition-colors">重新開始</button>
+                                </div>
+                            </div>
+
+                            {/* Options Area */}
+                            <div className="flex-1 flex flex-col">
+                                {(() => {
+                                    const selectGroupMap = {
+                                        artStyle: 'face_shape', gender: 'face_shape', race: 'face_shape', skinTone: 'face_shape', faceShape: 'face_shape', ears: 'face_shape', feature: 'face_shape',
+                                        hairStyle: 'hair', hairTie: 'hair', hairColor: 'hair', frontHair: 'hair', frontHairParting: 'hair', bangs: 'hair', bangsParting: 'hair', bangsWidth: 'hair',
+                                        eyebrows: 'facial_features', eyes: 'facial_features', irisColor: 'facial_features', irisDetail: 'facial_features', irisSize: 'facial_features', irisShape: 'facial_features', pupilShape: 'facial_features', eyeSparkle: 'facial_features', nose: 'facial_features', mouth: 'facial_features'
+                                    };
+
+                                    const checkboxList = [
+                                        {k: 'deepEyeSockets', l: '深邃眼窩', grp: 'facial_features'}, {k: 'prominentPhiltrum', l: '明顯人中', grp: 'facial_features'},
+                                        {k: 'freckles', l: '雀斑', grp: 'face_shape'}, {k: 'blush', l: '臉紅', grp: 'face_shape'}, {k: 'highlights', l: '套用挑染', grp: 'hair'},
+                                        {k: 'tearTroughs', l: '淚溝', grp: 'facial_features'}, {k: 'aegyoSal', l: '臥蠶', grp: 'facial_features'}, {k: 'nasolabialFolds', l: '法令紋', grp: 'facial_features'},
+                                        {k: 'cleftChin', l: '頦裂', grp: 'face_shape'}, {k: 'hairPartingLine', l: '髮縫', grp: 'hair'}
+                                    ];
+                                    
+                                    const activeSelects = Object.entries(tweakOptions).filter(([k]) => selectGroupMap[k] === activeGuideGroup);
+                                    const activeCheckboxes = checkboxList.filter(c => c.grp === activeGuideGroup);
+
+                                    return (
+                                        <div className="flex flex-col h-full gap-6">
+                                            {/* Selectors */}
+                                            {activeSelects.length > 0 && (
+                                                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                                    {activeSelects.filter(([k]) => k === 'irisShape' ? ['似顏繪', '日系動漫', '韓系動漫'].includes(faceTweakParams.artStyle) : true).map(([k, v]) => (
+                                                        <div key={k} className="flex flex-col">
+                                                            <label className="text-gray-400 mb-1 font-semibold text-xs">{v.label}</label>
+                                                            <select className="bg-gray-800 border border-gray-600 rounded-lg p-2 text-white text-sm focus:ring-2 focus:ring-green-500 outline-none" value={faceTweakParams[k]} onChange={e => {
+                                                                const val = e.target.value;
+                                                                if (k === 'faceShape') {
+                                                                    const changes = { ...defaultFaceGuides };
+                                                                    if (val === '瓜子臉') Object.assign(changes, { jawUpperDx: 18.5, jawLowerDx: 12.5, chinY: 78.5, chinBottomY: 80, chinDx: 1.5, cheekboneDx: 20.0, cheekboneY: 51 });
+                                                                    else if (val === '圓臉') Object.assign(changes, { jawUpperDx: 20.5, jawLowerDx: 16.5, chinY: 76.0, chinBottomY: 76.5, chinDx: 4.0, cheekboneDx: 21.5, cheekboneY: 53 });
+                                                                    else if (val === '方臉') Object.assign(changes, { jawUpperDx: 21.0, jawLowerDx: 18.0, chinY: 77.0, chinBottomY: 77.5, chinDx: 6.0, cheekboneDx: 21.0, cheekboneY: 52 });
+                                                                    else if (val === '日系標準') Object.assign(changes, { eyeDy: 5.5, eyeDx: 6.5, eyeCenterDx: 12, noseY: 63, noseDx: 1.5, mouthY: 70, mouthDx: 3.5, jawUpperDx: 19.5, jawLowerDx: 13, chinY: 77.0, chinBottomY: 78.0, chinDx: 1.5, cheekboneDx: 21, cheekboneY: 53 });
+                                                                    setFaceGuides(p => ({ ...p, ...changes }));
+                                                                } else if (k === 'race') {
+                                                                    let tweaks = { race: val }; let guides = {};
+                                                                    if (val === '白種人') { tweaks.skinTone = '白皙'; tweaks.eyes = '雙眼皮'; tweaks.deepEyeSockets = true; guides.noseDx = 2.0; guides.noseY = 62; guides.cheekboneDx = 19; }
+                                                                    else if (val === '黑種人') { tweaks.skinTone = '深色'; tweaks.mouth = '厚唇'; tweaks.hairStyle = '短捲髮'; guides.noseDx = 3.5; guides.mouthUpperDy = 2.5; guides.mouthLowerDy = 3.5; guides.mouthDx = 6.5; }
+                                                                    setFaceTweakParams(p => ({ ...p, ...tweaks })); setFaceGuides(p => ({ ...p, ...guides }));
+                                                                }
+                                                                setFaceTweakParams(p => ({...p, [k]: val}));
+                                                            }}>
+                                                                {v.opts.map(o => <option key={o} value={o}>{o}</option>)}
+                                                            </select>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+
+                                            {/* Subgroup Tabs & Sliders */}
+                                            {hasSubGrp && (
+                                                <div className="flex-1 flex flex-col mt-4">
+                                                    <div className="flex gap-2 border-b border-gray-700 pb-2 overflow-x-auto custom-scrollbar">
+                                                        {subGrpOrder.filter(g => activeSliders.some(s => s.subGrp === g)).map(grpName => (
+                                                            <button key={grpName} onClick={() => setActiveSubGroup(p => p === grpName ? null : grpName)} className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${currentActiveSubGrp === grpName ? 'bg-green-500/20 text-green-400 border border-green-500/50' : 'bg-gray-800 text-gray-400 border border-transparent hover:bg-gray-700'}`}>
+                                                                {grpName}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+                                                        {activeSliders.filter(s => currentActiveSubGrp ? s.subGrp === currentActiveSubGrp : true).map(sc => {
+                                                            const val = faceGuides[sc.k] - baseG[sc.k];
+                                                            return (
+                                                                <div key={sc.k} className="flex flex-col bg-gray-800/40 p-3 rounded-xl border border-gray-700/50">
+                                                                    <label className="text-gray-300 text-xs flex justify-between mb-2">{sc.l} <span className="text-green-400 font-mono">{val > 0 ? '+'+val.toFixed(1) : val.toFixed(1)}</span></label>
+                                                                    <input type="range" min={sc.min || "-2.5"} max={sc.max || "2.5"} step="0.1" value={val} onChange={e => {
+                                                                        const v = parseFloat(e.target.value);
+                                                                        if (sc.k.startsWith('bangs')) setFaceTweakParams(prev => prev.bangsWidth !== '自訂' ? { ...prev, bangsWidth: '自訂' } : prev);
+                                                                        if (sc.custom) setFaceGuides(p => ({...p, ...sc.custom(v, baseG)}));
+                                                                        else setFaceGuides(p => ({...p, [sc.k]: Math.max(0, Math.min(100, baseG[sc.k] + v))}));
+                                                                    }} className="accent-green-500" />
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Checkboxes */}
+                                            {activeCheckboxes.length > 0 && (
+                                                <div className="flex flex-wrap gap-4 mt-auto pt-4 border-t border-gray-700/50">
+                                                    {activeCheckboxes.map(cb => (
+                                                        <label key={cb.k} className="flex items-center gap-2 cursor-pointer group">
+                                                            <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${faceTweakParams[cb.k] ? 'bg-green-500 border-green-500' : 'bg-gray-800 border-gray-600'}`}>
+                                                                {faceTweakParams[cb.k] && <svg className="w-3 h-3 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+                                                            </div>
+                                                            <input type="checkbox" checked={faceTweakParams[cb.k]} onChange={e => setFaceTweakParams(p => ({...p, [cb.k]: e.target.checked}))} className="hidden" />
+                                                            <span className={`text-sm font-semibold ${faceTweakParams[cb.k] ? 'text-green-400' : 'text-gray-300'}`}>{cb.l}</span>
+                                                        </label>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const rootE = document.getElementById('root');
+        if (rootE) ReactDOM.createRoot(rootE).render(<App />);
+    </script>
+</body>
+</html>
